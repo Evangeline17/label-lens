@@ -129,8 +129,8 @@ Dockerfile                          CloudBase Run 多阶段容器构建
   “确认并填入商品”后才写入现有表单。
 - 图片在浏览器端压缩后经自有后端上传，不进入比较 payload，也不会写入
   `sessionStorage`；识别 `taskId`、状态和通过严格 schema 的结构化文字结果可刷新恢复。
-- 比赛生产构建默认使用 `VITE_ENABLE_LABEL_RECOGNITION_BETA=false`，因此不显示图片识别
-  操作入口；普通标签照片选择、预览、删除和手动录入保持可用。识别代码、接口与测试仍保留。
+- 生产 Docker 构建默认使用 `VITE_ENABLE_LABEL_RECOGNITION_BETA=true`，显示图片识别操作入口；
+  如需关闭，可在构建时显式传入 `--build-arg VITE_ENABLE_LABEL_RECOGNITION_BETA=false`。
 - 没有数据库、登录、Partner SSO、付费、条形码或商品数据库。
 - 包装宣传核对是透明的本地启发式规则，不构成法律或医疗判断。
 
@@ -164,7 +164,7 @@ docker run --rm -p 3000:3000 \
 
 不要把真实密钥写进 Dockerfile、镜像、README 或构建参数。生产容器默认使用端口
 3000，并尊重平台传入的 `PORT`。Docker 构建参数
-`VITE_ENABLE_LABEL_RECOGNITION_BETA` 默认是 `false`；比赛版本无需覆盖。该变量是 Vite
+`VITE_ENABLE_LABEL_RECOGNITION_BETA` 默认是 `true`；生产版本无需覆盖。该变量是 Vite
 构建时开关，容器启动后再修改不会重写已经生成的前端静态文件。Docker 同时把相同值传给
 运行时服务端；值为 `false` 时，服务端也会拒绝 OCR 请求，避免绕过隐藏的前端入口。
 
@@ -197,10 +197,10 @@ CloudBase 需要填写的核心值：
 | 环境变量名 | `INFINISYNAPSE_API_KEY` |
 | 健康检查路径 | `/api/health` |
 
-`VITE_ENABLE_LABEL_RECOGNITION_BETA` 的 Docker 构建参数已默认设为 `false`，比赛部署不需要
+`VITE_ENABLE_LABEL_RECOGNITION_BETA` 的 Docker 构建参数已默认设为 `true`，比赛部署不需要
 在 CloudBase 中覆盖。这个值既控制编译后的前端入口，也控制生产服务端是否接受识别任务。
-若未来需要重新开放 Beta，应在一次明确的重新构建中将 build arg 设为 `true`，并确保运行时
-使用相同值；只修改运行中容器的环境变量不会重写已经生成的前端静态文件。
+若需要关闭 Beta，应在一次明确的重新构建中将 build arg 设为 `false`，并确保运行时使用
+相同值；只修改运行中容器的环境变量不会重写已经生成的前端静态文件。
 
 ## 验证一次真实任务
 
