@@ -1,0 +1,14 @@
+node_modules
+dist
+dist-server
+.npm-cache
+.env.local
+.env
+.env.*
+!.env.example
+*.local
+*.tsbuildinfo
+*.key
+*.pem
+credentials*.json
+secrets*.json

@@ -1,0 +1,71 @@
+{
+  "taskInfo": {
+    "code": 200,
+    "message": "success",
+    "data": {
+      "id": "__TASK_ID__",
+      "ts": 0,
+      "task": "[REDACTED]",
+      "mode": "act",
+      "apiProvider": "[REDACTED]",
+      "apiModelId": "[REDACTED]",
+      "status": "completed"
+    }
+  },
+  "uiMessages": {
+    "code": 200,
+    "message": "success",
+    "data": [
+      {
+        "type": "say",
+        "say": "text",
+        "text": "[REDACTED REQUEST]"
+      },
+      {
+        "type": "say",
+        "say": "api_req_started",
+        "text": "[REDACTED ENVIRONMENT]"
+      },
+      {
+        "type": "say",
+        "say": "reasoning",
+        "partial": false,
+        "text": "[REDACTED REASONING]"
+      },
+      {
+        "type": "say",
+        "say": "text",
+        "partial": false,
+        "text": "# 本次结论\nA 更符合本次蛋白质密度目标。\n\n## 为什么更匹配\n客户端结果显示 A 的蛋白质密度在本次对比中排名第一。\n\n## 各款商品的主要取舍\nA 的蛋白质密度更高；B 和 C 在价格、份量等目标下各有不同取舍。\n\n## 不同目标下排名为什么变化\n不同排名使用热量、蛋白质、价格、钠和份量等不同客户端指标。\n\n## 包装宣传提醒\n宣传语应结合配料表和营养成分表理解，不据此作法律结论。\n\n## 数据不足与无法判断\n客户端未标记不足项。\n\n## 最终购买建议\n围绕本次目标可优先考虑 A，并结合本次预算选择购买份量。"
+      },
+      {
+        "type": "say",
+        "say": "reasoning",
+        "partial": false,
+        "text": "[REDACTED REASONING]"
+      },
+      {
+        "type": "say",
+        "say": "completion_result",
+        "partial": false,
+        "text": "任务已完成，核心结论已生成。"
+      },
+      {
+        "type": "ask",
+        "ask": "completion_result"
+      },
+      {
+        "type": "ask",
+        "ask": "resume_completed_task"
+      }
+    ]
+  },
+  "workspace": {
+    "code": 200,
+    "message": "success",
+    "data": {
+      "cwd": "[REDACTED]",
+      "files": []
+    }
+  }
+}

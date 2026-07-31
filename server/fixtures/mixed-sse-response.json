@@ -1,0 +1,73 @@
+{
+  "description": "根据官方 SSE 事件结构保存的离线混合响应夹具，不含真实密钥或用户图片。",
+  "events": [
+    {
+      "event": "state.ready",
+      "data": {
+        "taskId": "__TASK_ID__"
+      }
+    },
+    {
+      "event": "message.add",
+      "data": {
+        "taskId": "__TASK_ID__",
+        "message": {
+          "type": "say",
+          "say": "request",
+          "text": "完整 request：{\"goal\":\"proteinDensity\",\"products\":[{\"name\":\"原味高蛋白酸奶\"}]}",
+          "ts": 1001
+        }
+      }
+    },
+    {
+      "event": "message.partial",
+      "data": {
+        "taskId": "__TASK_ID__",
+        "message": {
+          "type": "say",
+          "say": "reasoning",
+          "text": "<analysis>让我分析这些商品并检查每个数值。</analysis>",
+          "ts": 1002,
+          "partial": true
+        }
+      }
+    },
+    {
+      "event": "message.add",
+      "data": {
+        "taskId": "__TASK_ID__",
+        "message": {
+          "type": "say",
+          "say": "tool",
+          "text": "[ERROR] write_to_file failed: missing path",
+          "ts": 1003
+        }
+      }
+    },
+    {
+      "event": "message.add",
+      "data": {
+        "taskId": "__TASK_ID__",
+        "message": {
+          "type": "say",
+          "say": "environment_details",
+          "text": "<environment_details>runtime=node; cwd=/workspace</environment_details>",
+          "ts": 1004
+        }
+      }
+    },
+    {
+      "event": "message.add",
+      "data": {
+        "taskId": "__TASK_ID__",
+        "message": {
+          "type": "say",
+          "say": "completion_result",
+          "text": "The user's task is complete. 以下是用户可见结果：\n# 本次结论\n在本次蛋白质密度目标下，A 更匹配。\n\n## 为什么更匹配\nA 每100千卡可获得 11.4g 蛋白质，在当前商品中排名第一。\n\n## 各款商品的主要取舍\n- A：蛋白质密度更高，整包价格为 8.9 元。\n- B：整包价格较低，但蛋白质密度排名靠后。\n- C：整包热量较低，蛋白质密度居中。\n\n## 不同目标下排名为什么变化\n控制热量看整包热量，蛋白质密度看每100千卡蛋白质，因此首选会变化。\n\n## 包装宣传提醒\n“0蔗糖”仅表示配料表未见蔗糖类原料，不等于无糖或低碳水。\n\n## 数据不足与无法判断\n客户端传入的不足项为空，本次不新增其他缺失判断。\n\n## 最终购买建议\n若本次主要看蛋白质密度，可优先考虑 A；其他目标下请查看对应排名。",
+          "ts": 1005,
+          "partial": false
+        }
+      }
+    }
+  ]
+}

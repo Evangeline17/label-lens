@@ -1,0 +1,35 @@
+{
+  "taskInfo": {
+    "code": 200,
+    "message": "success",
+    "data": {
+      "status": "waiting"
+    }
+  },
+  "uiMessages": {
+    "code": 200,
+    "message": "success",
+    "data": [
+      {
+        "type": "say",
+        "say": "reasoning",
+        "partial": false,
+        "text": "[redacted]"
+      },
+      {
+        "type": "ask",
+        "ask": "followup",
+        "partial": false,
+        "text": "{\"brief\":\"请求上传营养成分表图片\",\"question\":\"请通过聊天窗口上传该文件。\"}"
+      }
+    ]
+  },
+  "workspace": {
+    "code": 200,
+    "message": "success",
+    "data": {
+      "cwd": "/task",
+      "files": []
+    }
+  }
+}

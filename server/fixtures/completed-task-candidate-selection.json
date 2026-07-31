@@ -1,0 +1,74 @@
+{
+  "taskInfo": {
+    "code": 200,
+    "message": "success",
+    "data": {
+      "id": "__TASK_ID__",
+      "status": "completed"
+    }
+  },
+  "uiMessages": {
+    "code": 200,
+    "message": "success",
+    "data": [
+      {
+        "type": "say",
+        "say": "text",
+        "text": "SYSTEM PROMPT ECHO\n请严格输出以下结构：\n# 本次结论\n## 为什么更匹配\n## 各款商品的主要取舍\n## 不同目标下排名为什么变化\n## 包装宣传提醒\n## 数据不足与无法判断\n## 最终购买建议\ncompact payload: {\"goal\":\"[REDACTED]\",\"budgets\":{},\"products\":[],\"rankings\":[]}"
+      },
+      {
+        "type": "say",
+        "say": "api_req_started",
+        "text": "<environment_details>[REDACTED]</environment_details>"
+      },
+      {
+        "type": "say",
+        "say": "reasoning",
+        "partial": false,
+        "text": "[REDACTED REASONING]"
+      },
+      {
+        "type": "say",
+        "say": "text",
+        "partial": false,
+        "text": "# 本次结论\nD 更符合本次蛋白质密度目标。\n\n## 为什么更匹配\n客户端提供的蛋白质密度排名中，D 位于第一，整包蛋白质远超用户目标。\n\n## 各款商品的主要取舍\nD 的蛋白质密度更高；其他商品在价格、整包热量和份量目标下各有取舍。\n\n## 不同目标下排名为什么变化\n各排名使用不同的客户端指标，因此同一商品在不同目标下的位置可能变化。\n\n## 包装宣传提醒\n包装宣传语应结合配料表与营养成分表理解，不据此作法律结论。\n\n## 数据不足与无法判断\n仅列出客户端明确提供的信息不足项，不补充其他推测。\n\n## 最终购买建议\n围绕本次目标可优先考虑 D，并结合预算对应的可食用份量决定。"
+      },
+      {
+        "type": "say",
+        "say": "api_req_started",
+        "text": "[REDACTED TOOL REQUEST]"
+      },
+      {
+        "type": "say",
+        "say": "reasoning",
+        "partial": false,
+        "text": "[REDACTED TOOL RESULT]"
+      },
+      {
+        "type": "say",
+        "say": "text",
+        "partial": false,
+        "text": "任务已经完成，准备提交最终结果。"
+      },
+      {
+        "type": "say",
+        "say": "completion_result",
+        "partial": false,
+        "text": "## 对比任务完成\n最终结论摘要，不是约定格式的正式报告。"
+      },
+      {
+        "type": "ask",
+        "ask": "completion_result",
+        "text": ""
+      }
+    ]
+  },
+  "workspace": {
+    "code": 200,
+    "message": "success",
+    "data": {
+      "cwd": "[REDACTED]",
+      "files": []
+    }
+  }
+}
