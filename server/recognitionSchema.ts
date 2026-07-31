@@ -6,7 +6,6 @@ const RESULT_KEYS = [
   'netContent',
   'netContentUnit',
   'nutritionBasis',
-  'servingSize',
   'energyValue',
   'energyUnit',
   'protein',
@@ -81,6 +80,10 @@ function enumValue<T extends string>(
 export function validateLabelRecognitionResult(value: unknown): LabelRecognitionResult {
   if (!isRecord(value)) throw new RecognitionFormatError(['结果必须是JSON对象'])
   const issues: string[] = []
+  const missingKeys = RESULT_KEYS.filter(
+    (key) => !Object.prototype.hasOwnProperty.call(value, key),
+  )
+  if (missingKeys.length) issues.push(`缺少必需字段“${missingKeys[0]}”`)
   const extraKeys = Object.keys(value).filter(
     (key) => !RESULT_KEYS.includes(key as (typeof RESULT_KEYS)[number]),
   )
@@ -110,7 +113,6 @@ export function validateLabelRecognitionResult(value: unknown): LabelRecognition
         'unknown',
         issues,
       ) ?? 'unknown',
-    servingSize: nullableNumber(value.servingSize, 'servingSize', issues),
     energyValue: nullableNumber(value.energyValue, 'energyValue', issues),
     energyUnit: enumValue(
       value.energyUnit,

@@ -87,7 +87,10 @@ function withoutPhotos(
   }
 }
 
-function safeSession(value: unknown): LabelLensSession | null {
+function safeSession(
+  value: unknown,
+  restoreRecognitionState = true,
+): LabelLensSession | null {
   if (!value || typeof value !== 'object') return null
   const candidate = value as Partial<LabelLensSession>
   if (candidate.version !== 1) return null
@@ -96,40 +99,51 @@ function safeSession(value: unknown): LabelLensSession | null {
     session.app.recognitionSessions = Object.fromEntries(
       Object.entries(session.app.recognitionSessions).map(([productId, recognition]) => [
         productId,
-        sanitizeRecognitionSession(recognition),
+        restoreRecognitionState
+          ? restoreRecognitionSession(recognition)
+          : recognitionSessionForStorage(recognition),
       ]),
     )
   }
   return session
 }
 
-function sanitizeRecognitionSession(
+function recognitionSessionForStorage(
   session: LabelRecognitionSession,
 ): LabelRecognitionSession {
-  if (session.status === 'completed' && session.result) {
-    return {
-      status: 'completed',
-      result: { ...session.result },
-      draft: session.draft ? { ...session.draft } : undefined,
-      error: session.error,
-      confirmedAt: session.confirmedAt,
-      imageKinds: session.imageKinds ? [...session.imageKinds] : undefined,
-      rawText: session.rawText ? { ...session.rawText } : undefined,
-      fieldSources: session.fieldSources
-        ? Object.fromEntries(
-            Object.entries(session.fieldSources).map(([field, sources]) => [
-              field,
-              sources?.map((source) => ({ ...source })),
-            ]),
-          )
-        : undefined,
-      warnings: session.warnings ? [...session.warnings] : undefined,
-    }
+  const allowedStatuses: LabelRecognitionSession['status'][] = [
+    'idle',
+    'starting',
+    'processing',
+    'completed',
+    'failed',
+    'not_found',
+    'unknown',
+  ]
+  return {
+    status: allowedStatuses.includes(session.status) ? session.status : 'idle',
+    stale: Boolean(session.stale),
+    taskId: session.taskId,
+    result: session.result ? { ...session.result } : undefined,
   }
-  if (session.status === 'failed') {
-    return { status: 'failed', error: session.error }
+}
+
+function restoreRecognitionSession(
+  session: LabelRecognitionSession,
+): LabelRecognitionSession {
+  const stored = recognitionSessionForStorage(session)
+  const hasStoredRecognition = Boolean(
+    stored.taskId || stored.result || stored.stale || stored.status !== 'idle',
+  )
+  if (!hasStoredRecognition) return { status: 'idle', stale: false }
+  return {
+    ...stored,
+    status:
+      stored.status === 'starting' || stored.status === 'processing'
+        ? 'idle'
+        : stored.status,
+    stale: true,
   }
-  return { status: 'idle' }
 }
 
 export function loadLabelLensSession(
@@ -149,7 +163,15 @@ function mergeSession(
   storage: SessionStorageLike | null,
 ): void {
   if (!storage) return
-  const existing = loadLabelLensSession(storage) ?? { version: 1 as const }
+  let existing: LabelLensSession = { version: 1 }
+  try {
+    const raw = storage.getItem(LABEL_LENS_SESSION_KEY)
+    existing = raw
+      ? safeSession(JSON.parse(raw), false) ?? existing
+      : existing
+  } catch {
+    // Replace malformed stored state with the new valid snapshot.
+  }
   const next: LabelLensSession = { ...existing, ...patch, version: 1 }
   storage.setItem(LABEL_LENS_SESSION_KEY, JSON.stringify(next))
 }
@@ -199,7 +221,7 @@ export function saveAppSession(
           recognitionSessions: Object.fromEntries(
             Object.entries(app.recognitionSessions ?? {}).map(([productId, session]) => [
               productId,
-              sanitizeRecognitionSession(session),
+              recognitionSessionForStorage(session),
             ]),
           ),
         },

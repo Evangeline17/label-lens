@@ -22,5 +22,8 @@ describe('buildLabelRecognitionPrompt', () => {
     expect(prompt).toContain('严格区分 kJ 与 kcal、g 与 mg')
     expect(prompt).toContain('不得换算')
     expect(prompt).toContain('不识别价格')
+    expect(prompt).toContain('不要生成长报告')
+    expect(prompt).toContain('两个独立任务')
+    expect(prompt).not.toContain('"servingSize"')
   })
 })

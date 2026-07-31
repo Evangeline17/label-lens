@@ -189,32 +189,12 @@ export interface LabelRecognitionResult {
   netContent: number | null
   netContentUnit: NetUnit | null
   nutritionBasis: RecognitionNutritionBasis
-  servingSize: number | null
   energyValue: number | null
   energyUnit: EnergyUnit | null
   protein: number | null
   fat: number | null
   carbohydrate: number | null
   sodium: number | null
-}
-
-export interface LabelOcrFieldSource {
-  imageKind: 'ingredients' | 'nutrition'
-  text: string
-  confidence: number | null
-}
-
-export interface LabelOcrOutput {
-  result: LabelRecognitionResult
-  rawText: {
-    ingredients: string | null
-    nutrition: string | null
-  }
-  fieldSources: Partial<
-    Record<keyof LabelRecognitionResult, LabelOcrFieldSource[]>
-  >
-  warnings: string[]
-  imageKinds: Array<'ingredients' | 'nutrition'>
 }
 
 export interface LabelRecognitionDraft {
@@ -235,17 +215,22 @@ export interface LabelRecognitionDraft {
 export type LabelRecognitionStatus =
   | 'idle'
   | 'starting'
+  | 'processing'
   | 'completed'
   | 'failed'
+  | 'not_found'
+  | 'unknown'
 
 export interface LabelRecognitionSession {
   status: LabelRecognitionStatus
+  stale?: boolean
+  taskId?: string
+  createdAt?: string
+  progress?: string
   result?: LabelRecognitionResult
   draft?: LabelRecognitionDraft
   error?: string
+  localWaitEnded?: boolean
   confirmedAt?: string
   imageKinds?: Array<'ingredients' | 'nutrition'>
-  rawText?: LabelOcrOutput['rawText']
-  fieldSources?: LabelOcrOutput['fieldSources']
-  warnings?: string[]
 }

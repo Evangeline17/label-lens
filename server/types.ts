@@ -176,32 +176,12 @@ export interface LabelRecognitionResult {
   netContent: number | null
   netContentUnit: 'g' | 'mL' | null
   nutritionBasis: RecognitionNutritionBasis
-  servingSize: number | null
   energyValue: number | null
   energyUnit: 'kJ' | 'kcal' | null
   protein: number | null
   fat: number | null
   carbohydrate: number | null
   sodium: number | null
-}
-
-export interface LabelOcrFieldSource {
-  imageKind: LabelImageKind
-  text: string
-  confidence: number | null
-}
-
-export interface LabelOcrOutput {
-  result: LabelRecognitionResult
-  rawText: {
-    ingredients: string | null
-    nutrition: string | null
-  }
-  fieldSources: Partial<
-    Record<keyof LabelRecognitionResult, LabelOcrFieldSource[]>
-  >
-  warnings: string[]
-  imageKinds: LabelImageKind[]
 }
 
 export interface LabelRecognitionTaskResult {

@@ -13,6 +13,7 @@ import type {
   Product,
   ProductCategory,
 } from '../types'
+import { markRecognitionImagesChanged } from '../lib/labelRecognition'
 import { errorInputClass, FieldShell, inputClass } from './FormField'
 import { LabelRecognitionPanel } from './LabelRecognitionPanel'
 import { PhotoUpload } from './PhotoUpload'
@@ -58,6 +59,13 @@ export function ProductCard({
   const [collapsed, setCollapsed] = useState(false)
   const update = <K extends keyof Product>(field: K, value: Product[K]) => {
     onChange({ ...product, [field]: value })
+  }
+  const updatePhoto = (
+    field: 'ingredientPhoto' | 'nutritionPhoto',
+    value: Product[typeof field],
+  ) => {
+    onChange({ ...product, [field]: value })
+    onRecognitionSessionChange(markRecognitionImagesChanged(recognitionSession))
   }
 
   return (
@@ -304,13 +312,13 @@ export function ProductCard({
                 id={`${product.id}-ingredient-photo`}
                 label="上传配料表照片"
                 preview={product.ingredientPhoto}
-                onChange={(preview) => update('ingredientPhoto', preview)}
+                onChange={(preview) => updatePhoto('ingredientPhoto', preview)}
               />
               <PhotoUpload
                 id={`${product.id}-nutrition-photo`}
                 label="上传营养成分表照片"
                 preview={product.nutritionPhoto}
-                onChange={(preview) => update('nutritionPhoto', preview)}
+                onChange={(preview) => updatePhoto('nutritionPhoto', preview)}
               />
             </div>
             {recognitionBetaAvailable && recognitionBetaEnabled ? (

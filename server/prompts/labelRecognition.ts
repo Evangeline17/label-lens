@@ -15,6 +15,7 @@ export function buildLabelRecognitionPrompt(
   return `你正在为“标签真相局 LabelLens”识别一款包装食品的标签图片。
 
 这是一次严格字段抽取任务。不要联网、不要搜索商品、不要使用品牌数据库，也不要推测图片中看不清或没有出现的内容。
+任务只做标签字段提取：不要生成长报告，不要给购买建议，不要比较商品，也不要做复杂推理。本任务与最终选购建议是两个独立任务。
 
 下列标签图片已经作为本次任务的 files[] 附件提供：
 ${uploadList}
@@ -32,7 +33,6 @@ ${uploadList}
 - netContent：仅净含量的数字，否则 null。
 - netContentUnit：只能是 "g"、"mL" 或 null。
 - nutritionBasis：只能是 "per100g"、"per100ml"、"perServing"、"unknown"。
-- servingSize：仅在标签明确标示每份重量或体积时填写数字，否则 null；不得把净含量当成每份。
 - energyValue：按营养表标示基准抄录能量数字，否则 null。
 - energyUnit：只能是 "kJ"、"kcal" 或 null；不得换算。
 - protein、fat、carbohydrate：按同一营养标示基准抄录克数数字，否则 null。
@@ -42,19 +42,18 @@ ${uploadList}
 - 必须明确区分每100g、每100mL、每份和整包；无法确认时使用 unknown 或 null。
 - 看不清、被遮挡、冲突或图片未提供的字段一律使用 null/unknown，不得猜测或自行换算。
 
-必须输出且只允许输出以下键，所有键都必须出现：
+必须输出且只允许输出以下结构，所有键都必须出现：
 {
-  "productName": string | null,
-  "ingredientsText": string | null,
-  "netContent": number | null,
-  "netContentUnit": "g" | "mL" | null,
-  "nutritionBasis": "per100g" | "per100ml" | "perServing" | "unknown",
-  "servingSize": number | null,
-  "energyValue": number | null,
-  "energyUnit": "kJ" | "kcal" | null,
-  "protein": number | null,
-  "fat": number | null,
-  "carbohydrate": number | null,
-  "sodium": number | null
+  "productName": null,
+  "ingredientsText": null,
+  "netContent": null,
+  "netContentUnit": null,
+  "nutritionBasis": "unknown",
+  "energyValue": null,
+  "energyUnit": null,
+  "protein": null,
+  "fat": null,
+  "carbohydrate": null,
+  "sodium": null
 }`
 }

@@ -63,7 +63,8 @@ export function createRecognizeApi(options: RecognizeApiOptions = {}) {
     response: ServerResponse,
     pathname: string,
   ): Promise<void> {
-    if (pathname === '/api/recognize' && request.method === 'POST' && !isEnabled()) {
+    const isSubmissionPath = pathname === '/api/ocr/label'
+    if (isSubmissionPath && request.method === 'POST' && !isEnabled()) {
       json(response, 404, {
         error: '包装标签图片识别 Beta 当前未启用，请继续手动录入。',
       })
@@ -76,7 +77,7 @@ export function createRecognizeApi(options: RecognizeApiOptions = {}) {
       })
       return
     }
-    if (pathname === '/api/recognize') {
+    if (isSubmissionPath) {
       if (request.method !== 'POST') {
         json(response, 405, { error: '图片识别接口仅支持POST。' })
         return

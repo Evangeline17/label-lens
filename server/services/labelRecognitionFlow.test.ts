@@ -9,7 +9,6 @@ const finalResult = {
   netContent: 200,
   netContentUnit: 'g',
   nutritionBasis: 'per100g',
-  servingSize: null,
   energyValue: 330,
   energyUnit: 'kJ',
   protein: 9,

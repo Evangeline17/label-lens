@@ -4,7 +4,10 @@ import type { LabelRecognitionResult } from '../types'
 import {
   applyRecognitionDraft,
   abandonLabelRecognition,
-  completedRecognitionSession,
+  canConfirmRecognition,
+  markRecognitionImagesChanged,
+  mergeRecognitionStatus,
+  recognitionActionLabel,
   recognitionResultToDraft,
   startLabelRecognition,
 } from './labelRecognition'
@@ -19,7 +22,6 @@ const recognized: LabelRecognitionResult = {
   netContent: 200,
   netContentUnit: 'g',
   nutritionBasis: 'per100g',
-  servingSize: null,
   energyValue: 330,
   energyUnit: 'kJ',
   protein: 9,
@@ -48,13 +50,12 @@ describe('label recognition confirmation', () => {
     expect(confirmed.price).toBe('8.9')
   })
 
-  it('keeps the OCR result in confirmation state until the user applies it', () => {
+  it('keeps the InfiniSynapse result in confirmation state until the user applies it', () => {
     const product = createEmptyProduct(0)
-    const session = completedRecognitionSession({
+    const session = mergeRecognitionStatus({ status: 'processing' }, {
+      status: 'completed',
+      taskId: '6f645da0-63b5-487e-9cc8-745b1d608001',
       result: recognized,
-      rawText: { ingredients: '配料表：生牛乳、乳酸菌', nutrition: '能量 330kJ' },
-      fieldSources: {},
-      warnings: [],
       imageKinds: ['ingredients', 'nutrition'],
     })
 
@@ -131,14 +132,13 @@ describe('label recognition confirmation', () => {
     ).rejects.toThrow('服务端返回 HTTP 400：multipart 图片为空')
   })
 
-  it('posts images only to the synchronous local OCR endpoint', async () => {
+  it('posts images to the local OCR path and receives an asynchronous taskId', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          result: recognized,
-          rawText: { ingredients: '配料表：生牛乳', nutrition: null },
-          fieldSources: {},
-          warnings: [],
+          status: 'processing',
+          taskId: '6f645da0-63b5-487e-9cc8-745b1d608001',
+          progress: '识别任务已提交',
           imageKinds: ['ingredients'],
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -156,13 +156,84 @@ describe('label recognition confirmation', () => {
       size: file.size,
     })
 
-    expect(output.result.energyUnit).toBe('kJ')
+    expect(output.status).toBe('processing')
+    expect(output.taskId).toBe('6f645da0-63b5-487e-9cc8-745b1d608001')
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(fetchMock.mock.calls[0][0]).toBe('/api/ocr/label')
-    expect(String(fetchMock.mock.calls[0][0])).not.toContain('/api/recognize')
   })
 
   it('abandons only the local recognition state', () => {
     expect(abandonLabelRecognition()).toEqual({ status: 'idle' })
   })
+
+  it('marks a completed single-image result stale when a second image is added', () => {
+    const stale = markRecognitionImagesChanged({
+      status: 'completed',
+      taskId: 'old-task',
+      result: recognized,
+      draft: recognitionResultToDraft(recognized),
+      imageKinds: ['ingredients'],
+    })
+
+    expect(stale).toMatchObject({ status: 'completed', stale: true, result: recognized })
+    expect(stale.taskId).toBeUndefined()
+    expect(recognitionActionLabel(true, stale)).toBe('重新识别当前图片')
+    expect(canConfirmRecognition(stale)).toBe(false)
+  })
+
+  it('marks an old result stale when an image is replaced', () => {
+    const stale = markRecognitionImagesChanged({
+      status: 'completed',
+      taskId: 'old-task',
+      result: recognized,
+    })
+
+    expect(stale.stale).toBe(true)
+    expect(stale.taskId).toBeUndefined()
+    expect(stale.error).toBeUndefined()
+  })
+
+  it('allows recognition after one of two images is deleted and one remains', () => {
+    const stale = markRecognitionImagesChanged({
+      status: 'completed',
+      result: recognized,
+      imageKinds: ['ingredients', 'nutrition'],
+    })
+
+    expect(recognitionActionLabel(true, stale)).toBe('重新识别当前图片')
+  })
+
+  it('does not make a network request merely because images changed', () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    markRecognitionImagesChanged({ status: 'processing', taskId: 'old-task' })
+
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('does not offer another recognition action while processing', () => {
+    expect(
+      recognitionActionLabel(true, { status: 'processing', taskId: 'active-task' }),
+    ).toBeNull()
+  })
+
+  it('does not clear confirmed product fields when images change', () => {
+    const product = { ...createEmptyProduct(0), name: '已确认商品', protein: '9' }
+    const stale = markRecognitionImagesChanged({
+      status: 'completed',
+      result: recognized,
+      confirmedAt: '2026-08-01T00:00:00.000Z',
+    })
+
+    expect(product).toMatchObject({ name: '已确认商品', protein: '9' })
+    expect(stale.confirmedAt).toBe('2026-08-01T00:00:00.000Z')
+  })
+
+  it.each(['idle', 'completed', 'failed', 'not_found', 'unknown'] as const)(
+    'always offers an action for a photo in non-running %s state',
+    (status) => {
+      expect(recognitionActionLabel(true, { status })).not.toBeNull()
+    },
+  )
 })

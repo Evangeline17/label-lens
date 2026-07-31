@@ -16,16 +16,14 @@ npm install
 
 ```dotenv
 INFINISYNAPSE_API_KEY=your_real_server_side_key
-TENCENTCLOUD_SECRET_ID=your_tencentcloud_secret_id
-TENCENTCLOUD_SECRET_KEY=your_tencentcloud_secret_key
 VITE_ENABLE_LABEL_RECOGNITION_BETA=true
 ```
 
 `VITE_ENABLE_LABEL_RECOGNITION_BETA=true` 仅用于本地继续调试图片识别；不设置或设置为
-`false` 时，前端隐藏图片识别操作入口。`.env.example` 只记录安全的 Beta 默认值，真实
-密钥需手动写入 `.env.local`。InfiniSynapse 只用于最终 AI 选购报告；包装图片改用腾讯云
-`GeneralAccurateOCR`。两类凭证都只由本地 Node 服务读取，不要使用 `VITE_` 前缀保存密钥，
-也不要把密钥放入 React、浏览器存储或聊天内容。
+`false` 时，前端隐藏图片识别操作入口。真实密钥需手动写入 `.env.local`。
+包装标签识别与最终 AI 选购报告均由本项目 Node 服务端调用 InfiniSynapse，但会创建两个
+彼此独立的任务。API Key 只由服务端读取，不要使用 `VITE_` 前缀保存密钥，也不要把密钥
+放入 React、浏览器存储或聊天内容。
 
 3. 同时启动前端和后端：
 
@@ -126,11 +124,11 @@ Dockerfile                          CloudBase Run 多阶段容器构建
 - 比较数据、taskId 和已完成报告继续保存在用户浏览器的 `sessionStorage`，不写入服务端数据库。
 - 本地 SSE 等待与上游任务状态分离：本地最长等待 12 分钟，停止等待不会取消或重建上游任务。
 - 上游载荷会移除公式、UUID、图片、空字段和重复对象，并记录字符数、估算 token 数及压缩比例；不会记录完整内容。
-- 图片识别 Beta 通过腾讯云 `GeneralAccurateOCR` 同步处理，每次只处理一款商品、最多两张标签图片，
-  不创建 InfiniSynapse 任务、不使用 SSE，也不识别价格；只有用户点击
+- 图片识别 Beta 通过 InfiniSynapse 的官方主动附件链路异步处理，每次只处理一款商品、
+  最多两张标签图片，也不识别价格；只有用户点击
   “确认并填入商品”后才写入现有表单。
 - 图片在浏览器端压缩后经自有后端上传，不进入比较 payload，也不会写入
-  `sessionStorage`；OCR 原文、字段来源和低置信度提醒会在人工确认区展示。
+  `sessionStorage`；识别 `taskId`、状态和通过严格 schema 的结构化文字结果可刷新恢复。
 - 比赛生产构建默认使用 `VITE_ENABLE_LABEL_RECOGNITION_BETA=false`，因此不显示图片识别
   操作入口；普通标签照片选择、预览、删除和手动录入保持可用。识别代码、接口与测试仍保留。
 - 没有数据库、登录、Partner SSO、付费、条形码或商品数据库。
@@ -161,8 +159,6 @@ GET /api/health
 docker build -t label-lens .
 docker run --rm -p 3000:3000 \
   -e INFINISYNAPSE_API_KEY=your_server_side_key \
-  -e TENCENTCLOUD_SECRET_ID=your_tencentcloud_secret_id \
-  -e TENCENTCLOUD_SECRET_KEY=your_tencentcloud_secret_key \
   label-lens
 ```
 
@@ -183,8 +179,7 @@ docker run --rm -p 3000:3000 \
 5. 上传项目根目录；确认根目录中包含 `Dockerfile`，不要上传 `.env.local`。
 6. 服务端口填写 `3000`。
 7. 访问类型选择 `WEB` / 公网访问。
-8. 在服务端运行时环境变量中添加 `INFINISYNAPSE_API_KEY`。若重新构建并启用图片识别 Beta，
-   再添加 `TENCENTCLOUD_SECRET_ID` 和 `TENCENTCLOUD_SECRET_KEY`。
+8. 在服务端运行时环境变量中添加 `INFINISYNAPSE_API_KEY`。
 9. 最小实例数先设置为 `0`；其余 CPU、内存和最大实例数按试运行流量选择。
 10. 发起部署并等待镜像构建、实例启动和公网域名生成。
 11. 部署后访问 `https://你的域名/api/health`，确认 `status` 为 `ok` 且
@@ -200,7 +195,6 @@ CloudBase 需要填写的核心值：
 | 访问类型 | `WEB` / 公网访问 |
 | 最小实例数 | `0` |
 | 环境变量名 | `INFINISYNAPSE_API_KEY` |
-| OCR 环境变量 | `TENCENTCLOUD_SECRET_ID`、`TENCENTCLOUD_SECRET_KEY`（仅启用 Beta 时） |
 | 健康检查路径 | `/api/health` |
 
 `VITE_ENABLE_LABEL_RECOGNITION_BETA` 的 Docker 构建参数已默认设为 `false`，比赛部署不需要
@@ -229,15 +223,19 @@ GET http://127.0.0.1:8787/api/analyze/status/<taskId>
 ## 图片识别 Beta
 
 ```text
-POST /api/recognize
+POST /api/ocr/label
 GET  /api/recognize/status/:taskId
 ```
 
-前端只向本项目后端发送压缩后的 JPEG、PNG 或 WebP。后端先建立 SSE，再创建任务；
-当 Agent 发送官方 `upload_file_to_sandbox` 请求时，通过 `/api/ai/upload?taskId=`
-逐张上传，并用同一 `taskId`、`connId` 的 `askResponse` 继续。最终优先读取
-`final/label-extraction.json`，通过 schema 校验后才返回确认页。状态查询不会发送
-`newTask`。
+前端只向本项目后端发送压缩后的 JPEG、PNG 或 WebP。后端预生成 `taskId`，按图片顺序调用
+官方 `POST /api/tools/taskUpload/:taskId?subdir=label_inputs&naming=original`，再建立 SSE，
+把上传响应中的 `name`、`size`、`logicalPath`、`assetId` 映射进 `newTask.files[]`。
+该链路不等待 `upload_file_to_sandbox`，也不发送 `askResponse`。最终优先读取
+`final/label-extraction.json`，没有工作区结果时才接受通过严格 schema 的最终可见 JSON。
+状态查询只做官方 GET 恢复，不发送 `newTask`。
+
+识别任务只提取字段，不生成报告、购买建议或商品比较；最终选购建议必须由用户在比较结果页
+另行创建独立任务。单图和双图都支持，看不清的字段必须为 `null` 或 `unknown`。
 
 ## 后续接入位置
 

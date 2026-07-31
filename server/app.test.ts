@@ -81,7 +81,7 @@ describe('production app handler', () => {
 
     const health = await fetch(`${baseUrl}/api/health`)
     const analyze = await fetch(`${baseUrl}/api/analyze`, { method: 'POST' })
-    const recognize = await fetch(`${baseUrl}/api/recognize`, { method: 'POST' })
+    const recognize = await fetch(`${baseUrl}/api/ocr/label`, { method: 'POST' })
 
     expect(await health.json()).toEqual({
       status: 'ok',
@@ -106,7 +106,7 @@ describe('production app handler', () => {
       () => true,
     )
 
-    const malformed = await fetch(`${baseUrl}/api/recognize`, {
+    const malformed = await fetch(`${baseUrl}/api/ocr/label`, {
       method: 'POST',
       headers: { 'Content-Type': 'multipart/form-data' },
       body: new Uint8Array([1, 2, 3]),
@@ -134,7 +134,7 @@ describe('production app handler', () => {
       () => false,
     )
 
-    const response = await fetch(`${baseUrl}/api/recognize`, {
+    const response = await fetch(`${baseUrl}/api/ocr/label`, {
       method: 'POST',
       headers: { 'Content-Type': 'multipart/form-data' },
       body: new Uint8Array([1, 2, 3]),
@@ -240,7 +240,7 @@ describe('production app handler', () => {
       'ingredients-label.jpg',
     )
 
-    const response = await fetch(`${baseUrl}/api/recognize`, {
+    const response = await fetch(`${baseUrl}/api/ocr/label`, {
       method: 'POST',
       body: form,
     })

@@ -15,6 +15,7 @@ import {
   saveAiSession,
   saveAppSession,
   storedAiNeedsStatusQuery,
+  type LabelLensSession,
   type SessionStorageLike,
 } from './sessionState'
 
@@ -88,25 +89,30 @@ describe('LabelLens session state', () => {
         recognitionBetaEnabled: false,
         recognitionSessions: {
           [products[0].id]: {
-            status: 'completed',
-            result: {
-              productName: 'OCR商品',
-              ingredientsText: '生牛乳',
-              netContent: null,
-              netContentUnit: null,
-              nutritionBasis: 'unknown',
-              servingSize: null,
-              energyValue: null,
-              energyUnit: null,
-              protein: null,
-              fat: null,
-              carbohydrate: null,
-              sodium: null,
-            },
-            rawText: { ingredients: '配料表：生牛乳', nutrition: null },
-            fieldSources: {},
-            warnings: [],
+            status: 'processing',
+            taskId: '6f645da0-63b5-487e-9cc8-745b1d608001',
+            progress: 'InfiniSynapse 正在识别标签',
             imageKinds: ['ingredients'],
+          },
+          [products[1].id]: {
+            status: 'completed',
+            taskId: '7f645da0-63b5-487e-9cc8-745b1d608002',
+            result: {
+              productName: '已识别商品',
+              ingredientsText: '生牛乳、乳酸菌',
+              netContent: 200,
+              netContentUnit: 'g',
+              nutritionBasis: 'per100g',
+              energyValue: 330,
+              energyUnit: 'kJ',
+              protein: 9,
+              fat: 3,
+              carbohydrate: 5.5,
+              sodium: 65,
+            },
+            error: '不应保存的旧错误',
+            confirmedAt: '2026-08-01T00:00:00.000Z',
+            imageKinds: ['ingredients', 'nutrition'],
           },
         },
       },
@@ -124,6 +130,7 @@ describe('LabelLens session state', () => {
     )
 
     const serialized = storage.getItem(LABEL_LENS_SESSION_KEY) ?? ''
+    const storedSnapshot = JSON.parse(serialized) as LabelLensSession
     const restored = loadLabelLensSession(storage)
     expect(restored?.app?.step).toBe(4)
     expect(restored?.app?.goal).toBe('proteinDensity')
@@ -138,8 +145,20 @@ describe('LabelLens session state', () => {
     )
     expect(restored?.app?.recognitionBetaEnabled).toBe(false)
     expect(restored?.app?.recognitionSessions?.[products[0].id]).toMatchObject({
+      status: 'idle',
+      stale: true,
+      taskId: '6f645da0-63b5-487e-9cc8-745b1d608001',
+    })
+    expect(restored?.app?.recognitionSessions?.[products[1].id]).toMatchObject({
       status: 'completed',
-      rawText: { ingredients: '配料表：生牛乳', nutrition: null },
+      stale: true,
+      taskId: '7f645da0-63b5-487e-9cc8-745b1d608002',
+      result: { productName: '已识别商品', energyUnit: 'kJ' },
+    })
+    expect(storedSnapshot.app?.recognitionSessions?.[products[0].id]).toEqual({
+      status: 'processing',
+      stale: false,
+      taskId: '6f645da0-63b5-487e-9cc8-745b1d608001',
     })
     expect(restored?.app?.products[0].name).toBe(products[0].name)
     expect(loadAiSession(storage)).toMatchObject({
@@ -153,7 +172,11 @@ describe('LabelLens session state', () => {
     expect(serialized).not.toContain('ingredientPhoto')
     expect(serialized).not.toContain('nutritionPhoto')
     expect(serialized).not.toContain('data:image')
-    expect(serialized).not.toContain('6f645da0-63b5-487e-9cc8-745b1d608001')
+    expect(serialized).toContain('6f645da0-63b5-487e-9cc8-745b1d608001')
+    expect(serialized).not.toContain('InfiniSynapse 正在识别标签')
+    expect(serialized).not.toContain('不应保存的旧错误')
+    expect(serialized).not.toContain('confirmedAt')
+    expect(serialized).not.toContain('imageKinds')
     expect(serialized).not.toContain('INFINISYNAPSE_API_KEY')
   })
 

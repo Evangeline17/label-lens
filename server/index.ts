@@ -34,11 +34,4 @@ server.listen(port, host, () => {
   if (!process.env.INFINISYNAPSE_API_KEY?.trim()) {
     console.warn('未配置 INFINISYNAPSE_API_KEY；/api/analyze 将返回安全错误。')
   }
-  if (
-    process.env.VITE_ENABLE_LABEL_RECOGNITION_BETA === 'true' &&
-    (!process.env.TENCENTCLOUD_SECRET_ID?.trim() ||
-      !process.env.TENCENTCLOUD_SECRET_KEY?.trim())
-  ) {
-    console.warn('未配置腾讯云 OCR 服务端凭证；/api/ocr/label 将返回安全错误。')
-  }
 })

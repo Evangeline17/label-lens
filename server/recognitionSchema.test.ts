@@ -12,7 +12,6 @@ function result(overrides: Record<string, unknown> = {}) {
     netContent: 200,
     netContentUnit: 'g',
     nutritionBasis: 'per100g',
-    servingSize: null,
     energyValue: 330,
     energyUnit: 'kJ',
     protein: 9,
@@ -38,16 +37,32 @@ describe('label recognition schema', () => {
     expect(parsed.energyValue).toBe(418.4)
   })
 
-  it('normalizes omitted or unreadable fields to null and unknown', () => {
-    const parsed = validateLabelRecognitionResult({
+  it('preserves explicit null and unknown values for unreadable fields', () => {
+    const parsed = validateLabelRecognitionResult(result({
+      productName: null,
+      ingredientsText: null,
+      netContent: null,
+      netContentUnit: null,
+      nutritionBasis: 'unknown',
       energyValue: null,
       energyUnit: null,
-    })
+      protein: null,
+      fat: null,
+      carbohydrate: null,
+      sodium: null,
+    }))
 
     expect(parsed.productName).toBeNull()
     expect(parsed.netContent).toBeNull()
     expect(parsed.nutritionBasis).toBe('unknown')
     expect(parsed.protein).toBeNull()
+  })
+
+  it('requires every contract key even when the value is unreadable', () => {
+    const candidate = Object.fromEntries(
+      Object.entries(result()).filter(([key]) => key !== 'protein'),
+    )
+    expect(() => validateLabelRecognitionResult(candidate)).toThrowError(/缺少必需字段/)
   })
 
   it('rejects illegal JSON and Markdown wrappers', () => {
