@@ -16,11 +16,9 @@ npm install
 
 ```dotenv
 INFINISYNAPSE_API_KEY=your_real_server_side_key
-VITE_ENABLE_LABEL_RECOGNITION_BETA=true
 ```
 
-`VITE_ENABLE_LABEL_RECOGNITION_BETA=true` 仅用于本地继续调试图片识别；不设置或设置为
-`false` 时，前端隐藏图片识别操作入口。真实密钥需手动写入 `.env.local`。
+包装标签图片识别在正式版本中始终启用。真实密钥需手动写入 `.env.local`。
 包装标签识别与最终 AI 选购报告均由本项目 Node 服务端调用 InfiniSynapse，但会创建两个
 彼此独立的任务。API Key 只由服务端读取，不要使用 `VITE_` 前缀保存密钥，也不要把密钥
 放入 React、浏览器存储或聊天内容。
@@ -129,8 +127,7 @@ Dockerfile                          CloudBase Run 多阶段容器构建
   “确认并填入商品”后才写入现有表单。
 - 图片在浏览器端压缩后经自有后端上传，不进入比较 payload，也不会写入
   `sessionStorage`；识别 `taskId`、状态和通过严格 schema 的结构化文字结果可刷新恢复。
-- 生产 Docker 构建默认使用 `VITE_ENABLE_LABEL_RECOGNITION_BETA=true`，显示图片识别操作入口；
-  如需关闭，可在构建时显式传入 `--build-arg VITE_ENABLE_LABEL_RECOGNITION_BETA=false`。
+- 包装标签图片识别在正式版本中始终显示，不依赖 Docker 构建参数；识别结果仍需人工确认。
 - 没有数据库、登录、Partner SSO、付费、条形码或商品数据库。
 - 包装宣传核对是透明的本地启发式规则，不构成法律或医疗判断。
 
@@ -163,10 +160,8 @@ docker run --rm -p 3000:3000 \
 ```
 
 不要把真实密钥写进 Dockerfile、镜像、README 或构建参数。生产容器默认使用端口
-3000，并尊重平台传入的 `PORT`。Docker 构建参数
-`VITE_ENABLE_LABEL_RECOGNITION_BETA` 默认是 `true`；生产版本无需覆盖。该变量是 Vite
-构建时开关，容器启动后再修改不会重写已经生成的前端静态文件。Docker 同时把相同值传给
-运行时服务端；值为 `false` 时，服务端也会拒绝 OCR 请求，避免绕过隐藏的前端入口。
+3000，并尊重平台传入的 `PORT`。包装标签图片识别不依赖构建参数；服务端只在运行时读取
+`INFINISYNAPSE_API_KEY`。
 
 ## 腾讯云 CloudBase Run 部署
 
@@ -197,10 +192,8 @@ CloudBase 需要填写的核心值：
 | 环境变量名 | `INFINISYNAPSE_API_KEY` |
 | 健康检查路径 | `/api/health` |
 
-`VITE_ENABLE_LABEL_RECOGNITION_BETA` 的 Docker 构建参数已默认设为 `true`，比赛部署不需要
-在 CloudBase 中覆盖。这个值既控制编译后的前端入口，也控制生产服务端是否接受识别任务。
-若需要关闭 Beta，应在一次明确的重新构建中将 build arg 设为 `false`，并确保运行时使用
-相同值；只修改运行中容器的环境变量不会重写已经生成的前端静态文件。
+包装标签图片识别在正式版本中始终启用，CloudBase 无需配置前端构建开关。只需把
+`INFINISYNAPSE_API_KEY` 配置为服务端运行时环境变量。
 
 ## 验证一次真实任务
 

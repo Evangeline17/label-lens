@@ -33,8 +33,6 @@ interface Props {
   errors: FormErrors
   canDelete: boolean
   canDuplicate: boolean
-  recognitionBetaAvailable: boolean
-  recognitionBetaEnabled: boolean
   recognitionSession: LabelRecognitionSession
   onChange: (product: Product) => void
   onRecognitionSessionChange: (session: LabelRecognitionSession) => void
@@ -48,8 +46,6 @@ export function ProductCard({
   errors,
   canDelete,
   canDuplicate,
-  recognitionBetaAvailable,
-  recognitionBetaEnabled,
   recognitionSession,
   onChange,
   onRecognitionSessionChange,
@@ -321,18 +317,12 @@ export function ProductCard({
                 onChange={(preview) => updatePhoto('nutritionPhoto', preview)}
               />
             </div>
-            {recognitionBetaAvailable && recognitionBetaEnabled ? (
-              <LabelRecognitionPanel
-                product={product}
-                session={recognitionSession}
-                onSessionChange={onRecognitionSessionChange}
-                onConfirm={onChange}
-              />
-            ) : recognitionBetaAvailable ? (
-              <p className="mt-3 rounded-xl bg-stone-100 px-3 py-2.5 text-xs font-medium leading-5 text-stone-600">
-                图片识别 Beta 已关闭。手动录入和图片预览不受影响。
-              </p>
-            ) : null}
+            <LabelRecognitionPanel
+              product={product}
+              session={recognitionSession}
+              onSessionChange={onRecognitionSessionChange}
+              onConfirm={onChange}
+            />
           </section>
         </div>
       )}

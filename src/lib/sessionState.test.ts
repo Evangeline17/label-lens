@@ -86,7 +86,6 @@ describe('LabelLens session state', () => {
         rankings,
         claimChecks,
         preferred: { id: products[0].id, name: products[0].name },
-        recognitionBetaEnabled: false,
         recognitionSessions: {
           [products[0].id]: {
             status: 'processing',
@@ -143,7 +142,6 @@ describe('LabelLens session state', () => {
     expect(restored?.app?.customRequirementEvaluation).toEqual(
       customRequirementEvaluation,
     )
-    expect(restored?.app?.recognitionBetaEnabled).toBe(false)
     expect(restored?.app?.recognitionSessions?.[products[0].id]).toMatchObject({
       status: 'idle',
       stale: true,

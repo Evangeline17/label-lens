@@ -34,7 +34,6 @@ export interface StoredAppSession {
   rankings: RankingGroup[]
   claimChecks: ClaimCheckResult[]
   preferred: { id: string; name: string } | null
-  recognitionBetaEnabled?: boolean
   recognitionSessions?: Record<string, LabelRecognitionSession>
 }
 
@@ -217,7 +216,6 @@ export function saveAppSession(
             observations: check.observations.map((observation) => ({ ...observation })),
           })),
           preferred: app.preferred ? { ...app.preferred } : null,
-          recognitionBetaEnabled: app.recognitionBetaEnabled,
           recognitionSessions: Object.fromEntries(
             Object.entries(app.recognitionSessions ?? {}).map(([productId, session]) => [
               productId,

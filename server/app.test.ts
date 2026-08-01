@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createAppHandler } from './app'
 import { validAnalyzeInput } from './validation.test'
 
@@ -10,6 +10,7 @@ const cleanupDirectories: string[] = []
 const cleanupServers: Server[] = []
 
 afterEach(async () => {
+  vi.unstubAllEnvs()
   await Promise.all(
     cleanupServers.splice(0).map(
       (server) =>
@@ -38,14 +39,12 @@ async function listen(
   distDir: string,
   getApiKey: () => string | undefined,
   fetchImpl?: typeof fetch,
-  isRecognitionBetaEnabled?: () => boolean,
 ): Promise<string> {
   const server = createServer(
     createAppHandler({
       distDir,
       getApiKey,
       fetchImpl,
-      isRecognitionBetaEnabled,
     }),
   )
   cleanupServers.push(server)
@@ -72,12 +71,7 @@ describe('production app handler', () => {
   })
 
   it('exposes a boolean-only health check and a safe missing-key analyze error', async () => {
-    const baseUrl = await listen(
-      await fixtureDist(),
-      () => undefined,
-      undefined,
-      () => false,
-    )
+    const baseUrl = await listen(await fixtureDist(), () => undefined)
 
     const health = await fetch(`${baseUrl}/api/health`)
     const analyze = await fetch(`${baseUrl}/api/analyze`, { method: 'POST' })
@@ -92,9 +86,9 @@ describe('production app handler', () => {
     expect(await analyze.json()).toEqual({
       error: '未配置 INFINISYNAPSE_API_KEY。请设置服务端环境变量后重启服务。',
     })
-    expect(recognize.status).toBe(404)
+    expect(recognize.status).toBe(503)
     expect(await recognize.json()).toEqual({
-      error: '包装标签图片识别 Beta 当前未启用，请继续手动录入。',
+      error: '未配置 INFINISYNAPSE_API_KEY。图片识别不可用，请继续手动录入。',
     })
   })
 
@@ -121,17 +115,17 @@ describe('production app handler', () => {
     expect(await healthAfter.json()).toMatchObject({ status: 'ok' })
   })
 
-  it('does not contact the recognition upstream while the Beta is disabled', async () => {
+  it('does not gate recognition when the legacy Beta environment value is false', async () => {
+    vi.stubEnv('VITE_ENABLE_LABEL_RECOGNITION_BETA', 'false')
     let upstreamCalls = 0
     const fetchImpl = async () => {
       upstreamCalls += 1
-      throw new Error('disabled recognition must not contact upstream')
+      throw new Error('malformed multipart must not contact upstream')
     }
     const baseUrl = await listen(
       await fixtureDist(),
       () => 'test-key',
       fetchImpl as typeof fetch,
-      () => false,
     )
 
     const response = await fetch(`${baseUrl}/api/ocr/label`, {
@@ -140,9 +134,9 @@ describe('production app handler', () => {
       body: new Uint8Array([1, 2, 3]),
     })
 
-    expect(response.status).toBe(404)
+    expect(response.status).toBe(400)
     expect(await response.json()).toEqual({
-      error: '包装标签图片识别 Beta 当前未启用，请继续手动录入。',
+      error: '请求必须使用合法的multipart/form-data',
     })
     expect(upstreamCalls).toBe(0)
   })
@@ -231,7 +225,6 @@ describe('production app handler', () => {
       await fixtureDist(),
       () => 'test-key',
       fetchImpl as typeof fetch,
-      () => true,
     )
     const form = new FormData()
     form.append(

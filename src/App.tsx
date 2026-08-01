@@ -1,10 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AppHeader } from './components/AppHeader'
 import { StepProgress } from './components/StepProgress'
-import {
-  initialLabelRecognitionBetaEnabled,
-  LABEL_RECOGNITION_BETA_AVAILABLE,
-} from './config/features'
 import { createEmptyProduct, cloneMockProducts } from './data/mockProducts'
 import { GoalStep } from './features/GoalStep'
 import { ProductsStep } from './features/ProductsStep'
@@ -59,12 +55,6 @@ export default function App() {
   )
   const [products, setProducts] = useState<Product[]>(
     restoredApp?.products ?? [createEmptyProduct(0), createEmptyProduct(1)],
-  )
-  const [recognitionBetaEnabled, setRecognitionBetaEnabled] = useState(
-    initialLabelRecognitionBetaEnabled(
-      LABEL_RECOGNITION_BETA_AVAILABLE,
-      restoredApp?.recognitionBetaEnabled,
-    ),
   )
   const [recognitionSessions, setRecognitionSessions] = useState<
     Record<string, LabelRecognitionSession>
@@ -124,7 +114,6 @@ export default function App() {
       rankings,
       claimChecks,
       preferred: preferred ? { id: preferred.id, name: preferred.name } : null,
-      recognitionBetaEnabled,
       recognitionSessions,
     })
   }, [
@@ -138,7 +127,6 @@ export default function App() {
     goal,
     preferred,
     products,
-    recognitionBetaEnabled,
     recognitionSessions,
     rankings,
     step,
@@ -190,7 +178,6 @@ export default function App() {
     setCustomRequirementRules([])
     setUnresolvedPreferences([])
     setProducts([createEmptyProduct(0), createEmptyProduct(1)])
-    setRecognitionBetaEnabled(LABEL_RECOGNITION_BETA_AVAILABLE)
     setRecognitionSessions({})
     setShowProductValidation(false)
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -231,11 +218,8 @@ export default function App() {
               showProductValidation &&
               Object.values(allProductErrors).some((errors) => hasErrors(errors))
             }
-            recognitionBetaEnabled={recognitionBetaEnabled}
-            recognitionBetaAvailable={LABEL_RECOGNITION_BETA_AVAILABLE}
             recognitionSessions={recognitionSessions}
             onProductsChange={changeProducts}
-            onRecognitionBetaEnabledChange={setRecognitionBetaEnabled}
             onRecognitionSessionChange={(productId, session) =>
               setRecognitionSessions((current) => ({
                 ...current,

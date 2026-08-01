@@ -7,7 +7,6 @@ import { serveFrontend } from './staticFiles.js'
 interface AppHandlerOptions {
   distDir?: string
   getApiKey?: () => string | undefined
-  isRecognitionBetaEnabled?: () => boolean
   fetchImpl?: typeof fetch
 }
 
@@ -29,7 +28,6 @@ export function createAppHandler(options: AppHandlerOptions = {}) {
   })
   const recognizeApi = createRecognizeApi({
     getApiKey,
-    isEnabled: options.isRecognitionBetaEnabled,
     fetchImpl: options.fetchImpl,
   })
   return async function appHandler(

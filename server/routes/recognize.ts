@@ -6,7 +6,6 @@ import { ValidationError } from '../validation.js'
 
 interface RecognizeApiOptions {
   getApiKey?: () => string | undefined
-  isEnabled?: () => boolean
   fetchImpl?: typeof fetch
   limiter?: AnalyzeRateLimiter
   manager?: RecognitionTaskManager
@@ -48,9 +47,6 @@ function statusTaskId(pathname: string): string | null {
 export function createRecognizeApi(options: RecognizeApiOptions = {}) {
   const limiter = options.limiter ?? new AnalyzeRateLimiter()
   const getApiKey = options.getApiKey ?? (() => process.env.INFINISYNAPSE_API_KEY)
-  const isEnabled =
-    options.isEnabled ??
-    (() => process.env.VITE_ENABLE_LABEL_RECOGNITION_BETA === 'true')
   const manager =
     options.manager ??
     new RecognitionTaskManager({
@@ -64,12 +60,6 @@ export function createRecognizeApi(options: RecognizeApiOptions = {}) {
     pathname: string,
   ): Promise<void> {
     const isSubmissionPath = pathname === '/api/ocr/label'
-    if (isSubmissionPath && request.method === 'POST' && !isEnabled()) {
-      json(response, 404, {
-        error: '包装标签图片识别 Beta 当前未启用，请继续手动录入。',
-      })
-      return
-    }
     if (!getApiKey()?.trim()) {
       json(response, 503, {
         error:

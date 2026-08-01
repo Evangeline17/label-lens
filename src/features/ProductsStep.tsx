@@ -13,11 +13,8 @@ interface Props {
   products: Product[]
   errors: Record<string, FormErrors>
   showValidationSummary: boolean
-  recognitionBetaAvailable: boolean
-  recognitionBetaEnabled: boolean
   recognitionSessions: Record<string, LabelRecognitionSession>
   onProductsChange: (products: Product[]) => void
-  onRecognitionBetaEnabledChange: (enabled: boolean) => void
   onRecognitionSessionChange: (
     productId: string,
     session: LabelRecognitionSession,
@@ -31,11 +28,8 @@ export function ProductsStep({
   products,
   errors,
   showValidationSummary,
-  recognitionBetaAvailable,
-  recognitionBetaEnabled,
   recognitionSessions,
   onProductsChange,
-  onRecognitionBetaEnabledChange,
   onRecognitionSessionChange,
   onLoadDemo,
   onBack,
@@ -91,39 +85,20 @@ export function ProductsStep({
         演示数据为虚构数据，仅用于展示产品功能。
       </p>
 
-      {recognitionBetaAvailable && (
-        <div className="mb-5 flex items-center justify-between gap-4 rounded-2xl border border-orange/15 bg-orange/5 p-4">
-          <div>
-            <p className="flex items-center gap-2 text-sm font-black text-stone-800">
-              <ScanText size={17} className="text-orange" aria-hidden="true" />
-              包装标签图片识别 Beta
-            </p>
-            <p className="mt-1 text-xs leading-5 text-stone-600">
-              可随时关闭；关闭后手动录入、计算和比较流程保持不变。
-            </p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={recognitionBetaEnabled}
-            onClick={() =>
-              onRecognitionBetaEnabledChange(!recognitionBetaEnabled)
-            }
-            className={`relative h-7 w-12 shrink-0 rounded-full transition ${
-              recognitionBetaEnabled ? 'bg-leaf' : 'bg-stone-300'
-            }`}
-          >
-            <span
-              className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition ${
-                recognitionBetaEnabled ? 'left-6' : 'left-1'
-              }`}
-            />
-            <span className="sr-only">
-              {recognitionBetaEnabled ? '关闭图片识别Beta' : '开启图片识别Beta'}
-            </span>
-          </button>
+      <div className="mb-5 flex items-center justify-between gap-4 rounded-2xl border border-orange/15 bg-orange/5 p-4">
+        <div>
+          <p className="flex items-center gap-2 text-sm font-black text-stone-800">
+            <ScanText size={17} className="text-orange" aria-hidden="true" />
+            包装标签图片识别 Beta
+          </p>
+          <p className="mt-1 text-xs leading-5 text-stone-600">
+            识别结果需人工确认后填入；无法识别时仍可手动录入。
+          </p>
         </div>
-      )}
+        <span className="shrink-0 rounded-full bg-leaf/10 px-3 py-1 text-xs font-bold text-leaf">
+          已启用
+        </span>
+      </div>
 
       {showValidationSummary && (
         <div
@@ -143,8 +118,6 @@ export function ProductsStep({
             errors={errors[product.id] ?? {}}
             canDelete={products.length > 2}
             canDuplicate={products.length < 4}
-            recognitionBetaAvailable={recognitionBetaAvailable}
-            recognitionBetaEnabled={recognitionBetaEnabled}
             recognitionSession={
               recognitionSessions[product.id] ?? { status: 'idle' }
             }
