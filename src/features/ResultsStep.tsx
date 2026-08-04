@@ -58,6 +58,7 @@ interface Props {
   customRequirementEvaluation: CustomRequirementEvaluation
   onEdit: () => void
   onRestart: () => void
+  showAiAnalysis?: boolean
 }
 
 function ResultSection({
@@ -194,6 +195,7 @@ export function ResultsStep({
   customRequirementEvaluation,
   onEdit,
   onRestart,
+  showAiAnalysis = true,
 }: Props) {
   const preferredMetric = calculated.find((item) => item.id === preferred?.id)
   const preferredCheck = claimChecks.find((item) => item.productId === preferred?.id)
@@ -613,7 +615,24 @@ export function ResultsStep({
           )}
         </ResultSection>
 
-        <AiAnalysisSection payload={aiPayload} />
+        {showAiAnalysis && (
+          <details className="group rounded-3xl border border-orange/20 bg-[#fff8ee] p-4 shadow-card sm:p-5">
+            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 font-black text-ink">
+              <span className="flex items-center gap-2">
+                <Sparkles size={18} className="text-orange" aria-hidden="true" />
+                查看完整AI分析
+              </span>
+              <ChevronDown
+                size={18}
+                className="transition group-open:rotate-180"
+                aria-hidden="true"
+              />
+            </summary>
+            <div className="mt-4">
+              <AiAnalysisSection payload={aiPayload} />
+            </div>
+          </details>
+        )}
 
         <ResultSection
           icon={Share2}

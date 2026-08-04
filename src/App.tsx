@@ -3,7 +3,10 @@ import { AppHeader } from './components/AppHeader'
 import { StepProgress } from './components/StepProgress'
 import { createEmptyProduct, cloneMockProducts } from './data/mockProducts'
 import { GoalStep } from './features/GoalStep'
+import { HomeScreen } from './features/HomeScreen'
 import { ProductsStep } from './features/ProductsStep'
+import { QuickCompareStep } from './features/QuickCompareStep'
+import { QuickResults } from './features/QuickResults'
 import { ResultsStep } from './features/ResultsStep'
 import { ReviewStep } from './features/ReviewStep'
 import { calculateAll } from './lib/calculations'
@@ -13,6 +16,7 @@ import {
   parseCustomRequirements,
 } from './lib/customRequirements'
 import { getPreferredProduct, getRankingGroups } from './lib/ranking'
+import type { QuickGoal } from './lib/quickComparison'
 import {
   clearLabelLensSession,
   loadLabelLensSession,
@@ -34,9 +38,67 @@ const initialBudgets: Budgets = {
   price: '10',
 }
 
+type AppView = 'home' | 'quick-capture' | 'quick-results' | 'advanced'
+
+const quickGoalToComparisonGoal: Partial<Record<QuickGoal, ComparisonGoal>> = {
+  protein: 'proteinDensity',
+  calories: 'calories',
+  sodium: 'sodium',
+  value: 'proteinValue',
+}
+
+function demoRecognitionSessions(
+  products: Product[],
+): Record<string, LabelRecognitionSession> {
+  return Object.fromEntries(
+    products.map((product) => {
+      const result = {
+        productName: product.name,
+        ingredientsText: product.ingredients,
+        netContent: Number(product.netContent),
+        netContentUnit: product.netUnit,
+        nutritionBasis: product.basis,
+        energyValue: Number(product.energy),
+        energyUnit: product.energyUnit,
+        protein: Number(product.protein),
+        fat: Number(product.fat),
+        carbohydrate: Number(product.carbs),
+        sodium: Number(product.sodium),
+      }
+      return [
+        product.id,
+        {
+          status: 'completed' as const,
+          result,
+          draft: {
+            productName: product.name,
+            ingredientsText: product.ingredients,
+            netContent: product.netContent,
+            netContentUnit: product.netUnit,
+            nutritionBasis: product.basis,
+            servingSize: product.servingSize,
+            energyValue: product.energy,
+            energyUnit: product.energyUnit,
+            protein: product.protein,
+            fat: product.fat,
+            carbohydrate: product.carbs,
+            sodium: product.sodium,
+          },
+          confirmedAt: new Date().toISOString(),
+          imageKinds: ['ingredients', 'nutrition'] as Array<'ingredients' | 'nutrition'>,
+        },
+      ]
+    }),
+  )
+}
+
 export default function App() {
   const [restoredApp] = useState(() => loadLabelLensSession()?.app)
+  const [view, setView] = useState<AppView>(
+    restoredApp?.flow ?? (restoredApp ? 'advanced' : 'home'),
+  )
   const [step, setStep] = useState(restoredApp?.step ?? 1)
+  const [quickGoal, setQuickGoal] = useState<QuickGoal>('protein')
   const [goal, setGoal] = useState<ComparisonGoal>(
     restoredApp?.goal ?? 'proteinDensity',
   )
@@ -101,6 +163,7 @@ export default function App() {
       return
     }
     saveAppSession({
+      flow: view,
       step,
       goal,
       budgets,
@@ -131,6 +194,7 @@ export default function App() {
     rankings,
     step,
     unresolvedPreferences,
+    view,
   ])
 
   const nextFromGoal = () => {
@@ -180,15 +244,99 @@ export default function App() {
     setProducts([createEmptyProduct(0), createEmptyProduct(1)])
     setRecognitionSessions({})
     setShowProductValidation(false)
+    setQuickGoal('protein')
+    setView('home')
     window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const startQuickCompare = () => {
+    setProducts([createEmptyProduct(0), createEmptyProduct(1)])
+    setRecognitionSessions({})
+    setShowProductValidation(false)
+    setQuickGoal('protein')
+    setGoal('proteinDensity')
+    setView('quick-capture')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const loadQuickDemo = () => {
+    const demoProducts = cloneMockProducts()
+    changeProducts(demoProducts)
+    setRecognitionSessions(demoRecognitionSessions(demoProducts))
+    setQuickGoal('protein')
+    setGoal('proteinDensity')
+    setView('quick-results')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const enterAdvanced = (targetStep = 1) => {
+    setStep(targetStep)
+    setView('advanced')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const changeQuickGoal = (nextGoal: QuickGoal) => {
+    setQuickGoal(nextGoal)
+    const mapped = quickGoalToComparisonGoal[nextGoal]
+    if (mapped) setGoal(mapped)
   }
 
   return (
     <div className="min-h-screen bg-canvas text-ink">
       <AppHeader />
-      <StepProgress currentStep={step} />
+      {view === 'advanced' && <StepProgress currentStep={step} />}
       <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-9">
-        {step === 1 && (
+        {view === 'home' && (
+          <HomeScreen
+            onStart={startQuickCompare}
+            onDemo={loadQuickDemo}
+            onAdvanced={() => enterAdvanced(1)}
+          />
+        )}
+        {view === 'quick-capture' && (
+          <QuickCompareStep
+            products={products}
+            calculated={calculated}
+            recognitionSessions={recognitionSessions}
+            onProductsChange={changeProducts}
+            onRecognitionSessionChange={(productId, session) =>
+              setRecognitionSessions((current) => ({ ...current, [productId]: session }))
+            }
+            onBack={() => setView('home')}
+            onReady={() => {
+              setView('quick-results')
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+            onAdvanced={() => enterAdvanced(2)}
+          />
+        )}
+        {view === 'quick-results' && (
+          <QuickResults
+            products={products}
+            calculated={calculated}
+            claimChecks={claimChecks}
+            rankings={rankings}
+            quickGoal={quickGoal}
+            goal={goal}
+            budgets={budgets}
+            concernWords={concernWords}
+            customRequirementText={customRequirementText}
+            customRequirementRules={customRequirementRules}
+            unresolvedPreferences={unresolvedPreferences}
+            customRequirementEvaluation={customRequirementEvaluation}
+            onQuickGoalChange={changeQuickGoal}
+            onCustomRequirementTextChange={(value) => {
+              setCustomRequirementText(value)
+              const parsed = parseCustomRequirements(value)
+              setCustomRequirementRules(parsed.rules)
+              setUnresolvedPreferences(parsed.unresolvedPreferences)
+            }}
+            onCustomRequirementRulesChange={setCustomRequirementRules}
+            onEdit={() => setView('quick-capture')}
+            onRestart={restart}
+          />
+        )}
+        {view === 'advanced' && step === 1 && (
           <GoalStep
             goal={goal}
             budgets={budgets}
@@ -210,7 +358,7 @@ export default function App() {
             onNext={nextFromGoal}
           />
         )}
-        {step === 2 && (
+        {view === 'advanced' && step === 2 && (
           <ProductsStep
             products={products}
             errors={visibleProductErrors}
@@ -235,7 +383,7 @@ export default function App() {
             onNext={nextFromProducts}
           />
         )}
-        {step === 3 && (
+        {view === 'advanced' && step === 3 && (
           <ReviewStep
             products={products}
             calculated={calculated}
@@ -249,7 +397,7 @@ export default function App() {
             onNext={() => goTo(4)}
           />
         )}
-        {step === 4 && (
+        {view === 'advanced' && step === 4 && (
           <ResultsStep
             products={products}
             calculated={calculated}

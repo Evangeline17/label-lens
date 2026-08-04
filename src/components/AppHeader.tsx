@@ -13,7 +13,7 @@ export function AppHeader() {
             <p className="text-xs font-medium tracking-[0.12em] text-stone-500">LABELLENS</p>
           </div>
         </div>
-        <span className="rounded-full border border-orange/20 bg-orange/10 px-3 py-1.5 text-xs font-semibold text-orange">
+        <span className="hidden rounded-full border border-orange/20 bg-orange/10 px-3 py-1.5 text-xs font-semibold text-orange sm:inline-flex">
           食品货架对比器
         </span>
       </div>

@@ -72,7 +72,7 @@ export function PhotoUpload({ id, label, preview, onChange }: Props) {
       ) : (
         <label
           htmlFor={id}
-          className="flex min-h-16 cursor-pointer items-center justify-center gap-2 rounded-xl text-sm font-bold text-stone-600 transition hover:bg-white hover:text-orange"
+          className="flex min-h-16 min-w-0 cursor-pointer flex-wrap items-center justify-center gap-2 rounded-xl px-2 text-center text-sm font-bold leading-5 text-stone-600 transition hover:bg-white hover:text-orange"
         >
           <ImagePlus size={18} aria-hidden="true" />
           {compressing ? '正在压缩图片…' : label}

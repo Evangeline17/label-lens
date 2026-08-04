@@ -21,6 +21,7 @@ export interface SessionStorageLike {
 }
 
 export interface StoredAppSession {
+  flow?: 'home' | 'quick-capture' | 'quick-results' | 'advanced'
   step: number
   goal: ComparisonGoal
   budgets: Budgets

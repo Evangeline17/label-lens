@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1080, initial-scale=1" />
+  <title>LabelLens 小红书首发卡片</title>
+  <link rel="stylesheet" href="cards.css" />
+</head>
+<body>
+  <section class="card cover" id="card1">
+    <div class="eyebrow">我的产品学习记录</div>
+    <h1 class="title">第一次把自己的想法<br><span class="marker">做成了一个网页</span></h1>
+    <p class="subtitle">用 Codex 边学边做<br>想请大家帮我试试</p>
+    <span class="pill">食品标签对比工具｜测试版</span>
+    <div class="scribble">不是“健康打分” ↘</div>
+    <div class="tape"></div>
+    <div class="shot">
+      <span class="shot-label">真实结果页</span>
+      <img src="screenshots/app_results_top.png" alt="LabelLens 真实比较结果页" />
+    </div>
+    <div class="footer" data-page="1">LabelLens｜学习记录｜测试版</div>
+  </section>
+
+  <section class="card why" id="card2">
+    <div class="eyebrow">为什么做</div>
+    <h1 class="title small">这个想法，来自我买酸奶时的纠结</h1>
+    <p class="story">包装正面都写着“高蛋白、低脂、0蔗糖”，翻到背面却是每100g、整包、kJ和kcal。看了很久，最后还是经常凭感觉选。</p>
+    <div class="products">
+      <article class="product-mini"><span class="letter">A</span><h3>原味高蛋白酸奶</h3><p>200g · ¥8.9<br>330 kJ/100g · 蛋白质 9.0g</p></article>
+      <article class="product-mini"><span class="letter">B</span><h3>风味发酵乳</h3><p>200g · ¥5.5<br>410 kJ/100g · 蛋白质 3.2g</p></article>
+      <article class="product-mini"><span class="letter">C</span><h3>低脂原味酸奶</h3><p>180g · ¥6.9<br>270 kJ/100g · 蛋白质 5.0g</p></article>
+    </div>
+    <div class="shot"><span class="shot-label">项目内置虚构示例</span><img src="screenshots/app_review.png" alt="三个虚构酸奶示例的真实数据检查页" /></div>
+    <div class="footer" data-page="2">LabelLens｜学习记录｜测试版</div>
+  </section>
+
+  <section class="card does" id="card3">
+    <div class="eyebrow">它可以做什么</div>
+    <h1 class="title small">我想做的不是<br><span class="marker">“健康打分”</span></h1>
+    <div class="flow">
+      <div class="flow-item"><span class="num">1</span><strong>把 2—4 款商品放在一起</strong><span class="arrow">→</span></div>
+      <div class="flow-item"><span class="num">2</span><strong>根据自己的要求逐条比较</strong><span class="arrow">→</span></div>
+      <div class="flow-item"><span class="num">3</span><strong>告诉我每个选择的取舍</strong><span class="arrow">✓</span></div>
+    </div>
+    <p class="fineprint">例如：预算、整包热量、蛋白质、配料关注词等。不同目标下，答案也可能不同。</p>
+    <div class="shot"><span class="shot-label">真实录入页</span><img src="screenshots/app_products_demo.png" alt="LabelLens 真实商品录入页" /></div>
+    <div class="footer" data-page="3">LabelLens｜学习记录｜测试版</div>
+  </section>
+
+  <section class="card recognize" id="card4">
+    <div class="eyebrow">图片识别</div>
+    <h1 class="title small">不想一个数字<br>一个数字地抄</h1>
+    <div class="steps"><span>上传包装照片</span><span class="arrow">→</span><span>检查识别结果</span><span class="arrow">→</span><span>确认后填入</span></div>
+    <div class="visuals">
+      <div class="shot"><span class="shot-label">真实上传区域</span><img src="screenshots/app_image_upload.png" alt="LabelLens 真实包装照片上传区域" /></div>
+      <div class="confirm-panel">
+        <h3>人工确认识别结果</h3>
+        <div class="warning">AI识别可能有误，请对照包装检查数值、单位和标示基准。</div>
+        <div class="fake-field"><label>商品名称</label><div class="fake-input">原味高蛋白酸奶</div></div>
+        <div class="fake-field"><label>营养标示基准</label><div class="fake-input">每100g</div></div>
+        <div class="fake-field"><label>能量数值 / 单位</label><div class="fake-input">330 kJ</div></div>
+        <div class="fake-field"><label>蛋白质</label><div class="fake-input">9.0 g</div></div>
+        <div class="confirm-button">确认并填入商品</div>
+      </div>
+    </div>
+    <div class="note green">图片识别可能出错，所以我保留了人工确认这一步；确认后仍然可以手动修改。</div>
+    <div class="footer" data-page="4">LabelLens｜学习记录｜测试版</div>
+  </section>
+
+  <section class="card requirements" id="card5">
+    <div class="eyebrow">自定义购买要求</div>
+    <h1 class="title small">不是系统替我决定<br>而是先听我这次想买什么</h1>
+    <div class="quote">价格10元以内，<br>整包热量不超过150千卡，<br>蛋白质至少15克，<br>不想要配料表里有白砂糖。</div>
+    <div class="shot"><span class="shot-label">真实要求编辑器</span><img src="screenshots/app_custom_requirements.png" alt="LabelLens 真实自定义购买要求编辑器" /></div>
+    <div class="logic">
+      <div class="note orange"><strong>能确定的条件</strong><p>由程序逐条计算，并显示依据。</p></div>
+      <div class="note green"><strong>说不清的偏好</strong><p>保留原文，再交给 AI 解释。</p></div>
+    </div>
+    <div class="footer" data-page="5">LabelLens｜学习记录｜测试版</div>
+  </section>
+
+  <section class="card comparison" id="card6">
+    <div class="eyebrow">比较结果</div>
+    <h1 class="title small">没有一款全满足<br>也可以看清取舍</h1>
+    <div class="shot"><span class="shot-label">真实逐要求结果</span><img src="screenshots/app_results_tradeoffs.png" alt="LabelLens 真实逐要求匹配结果" /></div>
+    <div class="takeaways">
+      <div class="takeaway"><strong>A · 原味高蛋白酸奶</strong><p>蛋白质达标；整包热量超出上限 7.7 千卡。</p></div>
+      <div class="takeaway"><strong>B · 风味发酵乳</strong><p>价格达标；热量和蛋白质未满足本次要求。</p></div>
+      <div class="takeaway"><strong>C · 低脂原味酸奶</strong><p>整包热量达标；蛋白质低于要求 6 克。</p></div>
+    </div>
+    <p class="bottom-note">不强行推荐“完美商品”，只展示这几款在当前要求下的差别。</p>
+    <div class="footer" data-page="6">LabelLens｜学习记录｜测试版</div>
+  </section>
+
+  <section class="card ai" id="card7">
+    <div class="eyebrow">InfiniSynapse 综合建议</div>
+    <h1 class="title small">算清楚以后<br>再让 AI 帮我整理取舍</h1>
+    <div class="split">
+      <div class="shot"><span class="shot-label">真实功能区域</span><img src="screenshots/app_ai_section.png" alt="LabelLens 真实 AI 综合建议区域" /></div>
+      <div class="report">
+        <div class="fixture-label">项目已验证示例报告摘录</div>
+        <h3>本次结论</h3><p>在本次蛋白质密度目标下，A 更匹配。</p>
+        <div class="divider"></div>
+        <h3>为什么更匹配</h3><p>A 每100千卡可获得 11.4g 蛋白质，在当前商品中排名第一。</p>
+        <div class="divider"></div>
+        <h3>最终购买建议</h3><p>若本次主要看蛋白质密度，可优先考虑 A；其他目标下请查看对应排名。</p>
+      </div>
+    </div>
+    <div class="note orange">前面的数值和条件由程序计算。InfiniSynapse 只整理已经核对的数据，不会上传本地图片生成最终报告。</div>
+    <div class="footer" data-page="7">LabelLens｜学习记录｜测试版</div>
+  </section>
+
+  <section class="card feedback" id="card8">
+    <div class="eyebrow">邀请反馈</div>
+    <h1 class="title">目前还是测试版<br><span class="marker">想听听真实意见</span></h1>
+    <div class="questions">
+      <div class="question">哪里操作麻烦？</div>
+      <div class="question">哪些结果看不懂？</div>
+      <div class="question">哪些数据其实没必要展示？</div>
+      <div class="question">你最想拿它比较什么食品？</div>
+    </div>
+    <div class="closing">不用客气，觉得不好用可以直接说。<br>我还在学习，正好继续改。</div>
+    <div class="paperclip"></div>
+    <div class="shot"><span class="shot-label">LabelLens 首页</span><img src="screenshots/app_home.png" alt="LabelLens 真实首页" /></div>
+    <div class="footer" data-page="8">LabelLens｜学习记录｜测试版</div>
+  </section>
+</body>
+</html>
