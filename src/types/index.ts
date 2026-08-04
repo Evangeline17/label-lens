@@ -214,6 +214,7 @@ export interface LabelRecognitionDraft {
 
 export type LabelRecognitionStatus =
   | 'idle'
+  | 'queued'
   | 'starting'
   | 'processing'
   | 'completed'
@@ -225,6 +226,7 @@ export interface LabelRecognitionSession {
   status: LabelRecognitionStatus
   stale?: boolean
   taskId?: string
+  connId?: string
   createdAt?: string
   progress?: string
   result?: LabelRecognitionResult
@@ -233,4 +235,18 @@ export interface LabelRecognitionSession {
   localWaitEnded?: boolean
   confirmedAt?: string
   imageKinds?: Array<'ingredients' | 'nutrition'>
+}
+
+export interface LabelRecognitionQueueItem {
+  productId: string
+  taskId?: string
+  connId?: string
+  retryCount?: number
+  retryAt?: string
+  submissionStarted?: boolean
+}
+
+export interface LabelRecognitionQueueSnapshot {
+  current?: LabelRecognitionQueueItem
+  pendingProductIds: string[]
 }

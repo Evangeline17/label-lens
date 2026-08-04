@@ -73,6 +73,7 @@ describe('LabelLens session state', () => {
 
     saveAppSession(
       {
+        quickGoal: 'overall',
         step: 4,
         goal: 'proteinDensity',
         budgets,
@@ -90,6 +91,7 @@ describe('LabelLens session state', () => {
           [products[0].id]: {
             status: 'processing',
             taskId: '6f645da0-63b5-487e-9cc8-745b1d608001',
+            connId: '6f645da0-63b5-487e-9cc8-745b1d608099',
             progress: 'InfiniSynapse 正在识别标签',
             imageKinds: ['ingredients'],
           },
@@ -114,6 +116,14 @@ describe('LabelLens session state', () => {
             imageKinds: ['ingredients', 'nutrition'],
           },
         },
+        recognitionQueue: {
+          current: {
+            productId: products[0].id,
+            taskId: '6f645da0-63b5-487e-9cc8-745b1d608001',
+            connId: '6f645da0-63b5-487e-9cc8-745b1d608099',
+          },
+          pendingProductIds: [products[2].id],
+        },
       },
       storage,
     )
@@ -132,6 +142,7 @@ describe('LabelLens session state', () => {
     const storedSnapshot = JSON.parse(serialized) as LabelLensSession
     const restored = loadLabelLensSession(storage)
     expect(restored?.app?.step).toBe(4)
+    expect(restored?.app?.quickGoal).toBe('overall')
     expect(restored?.app?.goal).toBe('proteinDensity')
     expect(restored?.app?.products).toHaveLength(3)
     expect(restored?.app?.calculated).toEqual(calculated)
@@ -143,9 +154,10 @@ describe('LabelLens session state', () => {
       customRequirementEvaluation,
     )
     expect(restored?.app?.recognitionSessions?.[products[0].id]).toMatchObject({
-      status: 'idle',
-      stale: true,
+      status: 'processing',
+      stale: false,
       taskId: '6f645da0-63b5-487e-9cc8-745b1d608001',
+      connId: '6f645da0-63b5-487e-9cc8-745b1d608099',
     })
     expect(restored?.app?.recognitionSessions?.[products[1].id]).toMatchObject({
       status: 'completed',
@@ -157,6 +169,15 @@ describe('LabelLens session state', () => {
       status: 'processing',
       stale: false,
       taskId: '6f645da0-63b5-487e-9cc8-745b1d608001',
+      connId: '6f645da0-63b5-487e-9cc8-745b1d608099',
+    })
+    expect(restored?.app?.recognitionQueue).toEqual({
+      current: {
+        productId: products[0].id,
+        taskId: '6f645da0-63b5-487e-9cc8-745b1d608001',
+        connId: '6f645da0-63b5-487e-9cc8-745b1d608099',
+      },
+      pendingProductIds: [products[2].id],
     })
     expect(restored?.app?.products[0].name).toBe(products[0].name)
     expect(loadAiSession(storage)).toMatchObject({

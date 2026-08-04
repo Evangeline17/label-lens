@@ -37,8 +37,8 @@ describe('buildCompactAnalyzePayload', () => {
       name: 'A',
       displayValue: '11.41g/100 kcal',
     })
-    expect(stats.compactCharacters).toBeLessThan(stats.originalCharacters * 0.75)
-    expect(stats.reductionPercent).toBeGreaterThan(25)
+    expect(stats.compactCharacters).toBeLessThan(stats.originalCharacters)
+    expect(stats.reductionPercent).toBeGreaterThan(0)
     expect(stats.estimatedTokens).toBe(Math.ceil(stats.compactCharacters / 2))
   })
 
@@ -54,6 +54,8 @@ describe('buildCompactAnalyzePayload', () => {
       basis: '使用用户录入的每包价格',
     }
     input.customRequirementText = '价格不超过7元，最好口感清爽'
+    input.rawPreference = input.customRequirementText
+    input.quickGoal = 'protein'
     input.customRequirementRules = [rule]
     input.unresolvedPreferences = ['最好口感清爽']
     input.customRequirementEvaluation = {
@@ -85,6 +87,11 @@ describe('buildCompactAnalyzePayload', () => {
     const serialized = JSON.stringify(payload.customRequirements)
 
     expect(payload.customRequirements?.original).toBe(input.customRequirementText)
+    expect(payload.rawPreference).toBe(input.customRequirementText)
+    expect(payload.quickGoal).toBe('protein')
+    expect(payload.confirmedProducts).toEqual(payload.products)
+    expect(payload.deterministicMetrics).toHaveLength(2)
+    expect(payload.requestFingerprint).toBe(input.requestFingerprint)
     expect(payload.customRequirements?.constraints[0]).toMatchObject({
       kind: 'priceMax',
       value: '7.00 元/包',

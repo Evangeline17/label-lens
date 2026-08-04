@@ -17,6 +17,17 @@ const numberPattern = '(\\d+(?:\\.\\d+)?)'
 const upperBound = '(?:不超过|不高于|最多|以内|以下|≤|<=)'
 const lowerBound = '(?:至少|不低于|不少于|以上|≥|>=)'
 const commonSugarTerms = ['白砂糖', '蔗糖', '果葡糖浆', '浓缩果汁']
+const fuzzyPreferencePatterns = [
+  /想(?:要)?健康一点/,
+  /最近感冒了?/,
+  /想吃得好一点/,
+  /适合身体/,
+  /更有营养/,
+]
+
+export function isFuzzyHealthPreference(value: string): boolean {
+  return fuzzyPreferencePatterns.some((pattern) => pattern.test(value))
+}
 
 interface ParseResult {
   rules: CustomRequirementRule[]
@@ -142,14 +153,14 @@ function parseSegment(segment: string, startIndex: number): CustomRequirementRul
     )
   }
 
-  if (/(?:不含|未出现|没有)\s*/.test(segment)) {
+  if (/(?:不含|未出现|没有|不想要|不要|避免)\s*/.test(segment)) {
     const directTerms =
       segment
-        .match(/(?:不含|未出现|没有)(?:或(?:不含|未出现|没有))?\s*(.+)$/)?.[1]
+        .match(/(?:不含|未出现|没有|不想要|不要|避免)(?:或(?:不含|未出现|没有|不想要|不要|避免))?\s*(.+)$/)?.[1]
         ?.split(/[、和或/]+/)
         .map((term) =>
           term
-            .replace(/^(?:不含|未出现|没有)/, '')
+            .replace(/^(?:不含|未出现|没有|不想要|不要|避免)/, '')
             .replace(/等(?:相关)?(?:配料|原料|词)?$/, '')
             .trim(),
         )

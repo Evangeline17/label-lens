@@ -16,6 +16,7 @@ import type {
   AiTaskStatusResult,
 } from '../lib/aiAnalysis'
 import {
+  aiAnalysisRequestKey,
   cancelAiAnalysis,
   getAiAnalysisStatus,
   startAiAnalysis,
@@ -48,9 +49,9 @@ type AnalysisState =
 const POLL_INTERVAL_MS = 9_000
 const LONG_RUNNING_MS = 5 * 60_000
 
-function restoreAnalysisState(): AnalysisState {
+function restoreAnalysisState(requestKey: string): AnalysisState {
   const stored = loadAiSession()
-  if (!stored) return { status: 'idle' }
+  if (!stored || stored.requestKey !== requestKey) return { status: 'idle' }
   if (stored.status === 'completed' && stored.taskId && stored.report) {
     return {
       status: 'success',
@@ -59,6 +60,7 @@ function restoreAnalysisState(): AnalysisState {
         report: stored.report,
         normalized: stored.normalized,
         normalizationWarnings: stored.normalizationWarnings,
+        reportMode: stored.reportMode,
       },
     }
   }
@@ -84,7 +86,7 @@ function restoreAnalysisState(): AnalysisState {
       status: 'format_error',
       taskId: stored.taskId,
       createdAt: stored.createdAt,
-      message: stored.error ?? '任务已完成，但最终报告格式未通过校验。',
+      message: stored.error ?? '返回结果中没有可安全展示的分析文字。',
     }
   }
   if (stored.status === 'not_found') {
@@ -96,8 +98,17 @@ function restoreAnalysisState(): AnalysisState {
   return { status: 'idle' }
 }
 
-export function AiAnalysisSection({ payload }: { payload: AiAnalyzePayload }) {
-  const [state, setState] = useState<AnalysisState>(restoreAnalysisState)
+export function AiAnalysisSection({
+  payload,
+  autoStart = false,
+}: {
+  payload: AiAnalyzePayload
+  autoStart?: boolean
+}) {
+  const requestKey = aiAnalysisRequestKey(payload)
+  const [state, setState] = useState<AnalysisState>(() =>
+    restoreAnalysisState(requestKey),
+  )
   const [copied, setCopied] = useState(false)
   const controllerRef = useRef<AbortController | null>(null)
 
@@ -111,6 +122,7 @@ export function AiAnalysisSection({ payload }: { payload: AiAnalyzePayload }) {
             report: result.report,
             normalized: result.normalized,
             normalizationWarnings: result.normalizationWarnings,
+            reportMode: result.reportMode,
           },
         })
         return
@@ -129,7 +141,7 @@ export function AiAnalysisSection({ payload }: { payload: AiAnalyzePayload }) {
           status: 'format_error',
           taskId: result.taskId,
           createdAt: result.createdAt ?? fallbackCreatedAt,
-          message: result.error || '任务已完成，但最终报告格式未通过校验。',
+          message: result.error || '返回结果中没有可安全展示的分析文字。',
         })
         return
       }
@@ -213,16 +225,19 @@ export function AiAnalysisSection({ payload }: { payload: AiAnalyzePayload }) {
     if (state.status === 'success') {
       saveAiSession({
         status: 'completed',
+        requestKey,
         taskId: state.result.taskId,
         report: state.result.report,
         normalized: state.result.normalized,
         normalizationWarnings: state.result.normalizationWarnings,
+        reportMode: state.result.reportMode,
       })
       return
     }
     if (state.status === 'processing') {
       saveAiSession({
         status: 'processing',
+        requestKey,
         taskId: state.taskId,
         createdAt: state.createdAt,
         progress: state.progress,
@@ -234,6 +249,7 @@ export function AiAnalysisSection({ payload }: { payload: AiAnalyzePayload }) {
     if (state.status === 'unknown') {
       saveAiSession({
         status: 'unknown',
+        requestKey,
         taskId: state.taskId,
         createdAt: state.createdAt,
         error: state.message,
@@ -243,6 +259,7 @@ export function AiAnalysisSection({ payload }: { payload: AiAnalyzePayload }) {
     if (state.status === 'failed') {
       saveAiSession({
         status: 'failed',
+        requestKey,
         taskId: state.taskId,
         createdAt: state.createdAt,
         error: state.message,
@@ -252,6 +269,7 @@ export function AiAnalysisSection({ payload }: { payload: AiAnalyzePayload }) {
     if (state.status === 'format_error') {
       saveAiSession({
         status: 'format_error',
+        requestKey,
         taskId: state.taskId,
         createdAt: state.createdAt,
         error: state.message,
@@ -261,13 +279,14 @@ export function AiAnalysisSection({ payload }: { payload: AiAnalyzePayload }) {
     if (state.status === 'not_found' || state.status === 'cancelled') {
       saveAiSession({
         status: state.status,
+        requestKey,
         taskId: state.taskId,
         createdAt: state.createdAt,
       })
       return
     }
-    saveAiSession({ status: state.status })
-  }, [state])
+    saveAiSession({ status: state.status, requestKey })
+  }, [requestKey, state])
 
   const processingTaskId =
     state.status === 'processing' || state.status === 'unknown' ? state.taskId : null
@@ -298,7 +317,10 @@ export function AiAnalysisSection({ payload }: { payload: AiAnalyzePayload }) {
     controllerRef.current = controller
     setState({ status: 'starting' })
     try {
-      const result = await startAiAnalysis(payload, controller.signal)
+      const result = await startAiAnalysis(
+        payload,
+        autoStart ? undefined : controller.signal,
+      )
       applyTaskStatus(result)
     } catch (error) {
       if (controller.signal.aborted) return
@@ -351,6 +373,15 @@ export function AiAnalysisSection({ payload }: { payload: AiAnalyzePayload }) {
     state.status === 'processing' &&
     (state.localWaitEnded || Date.now() - Date.parse(state.createdAt) >= LONG_RUNNING_MS)
 
+  const autoStartedRef = useRef(false)
+  useEffect(() => {
+    if (!autoStart || state.status !== 'idle' || autoStartedRef.current) return
+    autoStartedRef.current = true
+    void generate()
+    // Automatic generation is deliberately a one-shot transition on entering this view.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart, state.status])
+
   return (
     <section className="rounded-3xl border border-orange/20 bg-[#fff8ee] p-5 shadow-card sm:p-7">
       <div className="flex items-start gap-3">
@@ -366,7 +397,13 @@ export function AiAnalysisSection({ payload }: { payload: AiAnalyzePayload }) {
         </div>
       </div>
 
-      {state.status === 'idle' && (
+      {state.status === 'idle' && autoStart && (
+        <div className="mt-5 rounded-2xl border border-orange/15 bg-white p-4 text-sm font-semibold text-stone-600">
+          正在准备生成完整分析；已有任务会优先恢复，不会重复创建。
+        </div>
+      )}
+
+      {state.status === 'idle' && !autoStart && (
         <div className="mt-5 rounded-2xl border border-orange/15 bg-white p-4">
           <p className="text-sm font-semibold text-stone-600">尚未生成。</p>
           <button
@@ -416,10 +453,6 @@ export function AiAnalysisSection({ payload }: { payload: AiAnalyzePayload }) {
               )}
             </div>
           </div>
-          <p className="mt-3 rounded-xl bg-stone-50 px-3 py-2 text-xs text-stone-500">
-            taskId：
-            <code className="ml-1 break-all font-mono text-stone-700">{state.taskId}</code>
-          </p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <button
               type="button"
@@ -469,9 +502,6 @@ export function AiAnalysisSection({ payload }: { payload: AiAnalyzePayload }) {
             <div className="min-w-0">
               <p className="text-sm font-black">暂时无法识别任务状态</p>
               <p className="mt-1 text-sm leading-6 text-stone-600">{state.message}</p>
-              <p className="mt-2 break-all font-mono text-xs text-stone-500">
-                taskId：{state.taskId}
-              </p>
             </div>
           </div>
           <button
@@ -490,11 +520,8 @@ export function AiAnalysisSection({ payload }: { payload: AiAnalyzePayload }) {
           <div className="flex gap-3">
             <TriangleAlert className="mt-0.5 shrink-0 text-orange" size={20} aria-hidden="true" />
             <div className="min-w-0">
-              <p className="text-sm font-black">任务已完成，但最终报告格式未通过校验。</p>
+              <p className="text-sm font-black">分析任务已完成，但没有取得可展示的内容。</p>
               <p className="mt-1 text-sm leading-6 text-stone-600">{state.message}</p>
-              <p className="mt-2 break-all font-mono text-xs text-stone-500">
-                taskId：{state.taskId}
-              </p>
               <p className="mt-2 text-xs text-stone-500">上方确定性比较结果不受影响。</p>
             </div>
           </div>
@@ -505,7 +532,7 @@ export function AiAnalysisSection({ payload }: { payload: AiAnalyzePayload }) {
         <div className="mt-5 rounded-2xl border border-stone-200 bg-white p-4">
           <p className="text-sm font-black">没有找到这项任务</p>
           <p className="mt-1 text-sm leading-6 text-stone-600">
-            本地和 InfiniSynapse 均未找到对应 taskId，现有比较结果不受影响。
+            本地和 InfiniSynapse 均未找到对应分析任务，现有比较结果不受影响。
           </p>
         </div>
       )}
@@ -522,16 +549,22 @@ export function AiAnalysisSection({ payload }: { payload: AiAnalyzePayload }) {
       {state.status === 'success' && (
         <div className="mt-5">
           <div className="rounded-2xl border border-stone-200 bg-white p-4 sm:p-6">
+            {state.result.reportMode === 'partial' && (
+              <p className="mb-4 rounded-xl bg-orange/10 px-3 py-2 text-xs font-semibold leading-5 text-orange">
+                部分分析格式未完整识别，以下内容已根据可用结果整理。
+              </p>
+            )}
+            {state.result.reportMode === 'raw' && (
+              <p className="mb-4 rounded-xl bg-stone-100 px-3 py-2 text-xs font-semibold leading-5 text-stone-600">
+                分析任务已完成，以下为AI返回的原始分析结果。
+              </p>
+            )}
             <MarkdownReport markdown={state.result.report} />
             {state.result.normalized && (
               <p className="mt-5 border-t border-stone-100 pt-3 text-xs leading-5 text-stone-400">
                 部分AI措辞已按客户端数据边界自动规范。
               </p>
             )}
-          </div>
-          <div className="mt-3 rounded-xl bg-white/70 px-3 py-2 text-xs text-stone-500">
-            真实 taskId：
-            <code className="ml-1 break-all font-mono text-stone-700">{state.result.taskId}</code>
           </div>
           <button
             type="button"

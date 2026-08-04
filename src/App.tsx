@@ -6,6 +6,8 @@ import { GoalStep } from './features/GoalStep'
 import { HomeScreen } from './features/HomeScreen'
 import { ProductsStep } from './features/ProductsStep'
 import { QuickCompareStep } from './features/QuickCompareStep'
+import { QuickFullAnalysis } from './features/QuickFullAnalysis'
+import { QuickRecognitionReview } from './features/QuickRecognitionReview'
 import { QuickResults } from './features/QuickResults'
 import { ResultsStep } from './features/ResultsStep'
 import { ReviewStep } from './features/ReviewStep'
@@ -29,6 +31,7 @@ import type {
   CustomRequirementRule,
   FormErrors,
   LabelRecognitionSession,
+  LabelRecognitionQueueSnapshot,
   Product,
 } from './types'
 
@@ -38,13 +41,28 @@ const initialBudgets: Budgets = {
   price: '10',
 }
 
-type AppView = 'home' | 'quick-capture' | 'quick-results' | 'advanced'
+type AppView =
+  | 'home'
+  | 'quick-upload'
+  | 'quick-review'
+  | 'quick-result'
+  | 'quick-analysis'
+  | 'advanced'
 
-const quickGoalToComparisonGoal: Partial<Record<QuickGoal, ComparisonGoal>> = {
-  protein: 'proteinDensity',
-  calories: 'calories',
-  sodium: 'sodium',
-  value: 'proteinValue',
+function restoredView(flow: string | undefined): AppView {
+  if (flow === 'quick-capture') return 'quick-upload'
+  if (flow === 'quick-results') return 'quick-result'
+  if (
+    flow === 'home' ||
+    flow === 'quick-upload' ||
+    flow === 'quick-review' ||
+    flow === 'quick-result' ||
+    flow === 'quick-analysis' ||
+    flow === 'advanced'
+  ) {
+    return flow
+  }
+  return flow ? 'advanced' : 'home'
 }
 
 function demoRecognitionSessions(
@@ -95,10 +113,12 @@ function demoRecognitionSessions(
 export default function App() {
   const [restoredApp] = useState(() => loadLabelLensSession()?.app)
   const [view, setView] = useState<AppView>(
-    restoredApp?.flow ?? (restoredApp ? 'advanced' : 'home'),
+    restoredView(restoredApp?.flow),
   )
   const [step, setStep] = useState(restoredApp?.step ?? 1)
-  const [quickGoal, setQuickGoal] = useState<QuickGoal>('protein')
+  const [quickGoal, setQuickGoal] = useState<QuickGoal | null>(
+    restoredApp?.quickGoal ?? null,
+  )
   const [goal, setGoal] = useState<ComparisonGoal>(
     restoredApp?.goal ?? 'proteinDensity',
   )
@@ -121,6 +141,10 @@ export default function App() {
   const [recognitionSessions, setRecognitionSessions] = useState<
     Record<string, LabelRecognitionSession>
   >(restoredApp?.recognitionSessions ?? {})
+  const [recognitionQueue, setRecognitionQueue] = useState<LabelRecognitionQueueSnapshot>(
+    restoredApp?.recognitionQueue ?? { pendingProductIds: [] },
+  )
+  const [reviewAllRecognitionFields, setReviewAllRecognitionFields] = useState(false)
   const [showProductValidation, setShowProductValidation] = useState(false)
   const skipNextSessionSaveRef = useRef(false)
 
@@ -164,6 +188,7 @@ export default function App() {
     }
     saveAppSession({
       flow: view,
+      quickGoal,
       step,
       goal,
       budgets,
@@ -178,6 +203,7 @@ export default function App() {
       claimChecks,
       preferred: preferred ? { id: preferred.id, name: preferred.name } : null,
       recognitionSessions,
+      recognitionQueue,
     })
   }, [
     budgets,
@@ -190,7 +216,9 @@ export default function App() {
     goal,
     preferred,
     products,
+    quickGoal,
     recognitionSessions,
+    recognitionQueue,
     rankings,
     step,
     unresolvedPreferences,
@@ -229,6 +257,15 @@ export default function App() {
         Object.entries(current).filter(([productId]) => ids.has(productId)),
       ),
     )
+    setRecognitionQueue((current) => ({
+      current:
+        current.current && ids.has(current.current.productId)
+          ? current.current
+          : undefined,
+      pendingProductIds: current.pendingProductIds.filter((productId) =>
+        ids.has(productId),
+      ),
+    }))
   }
 
   const restart = () => {
@@ -243,8 +280,9 @@ export default function App() {
     setUnresolvedPreferences([])
     setProducts([createEmptyProduct(0), createEmptyProduct(1)])
     setRecognitionSessions({})
+    setRecognitionQueue({ pendingProductIds: [] })
     setShowProductValidation(false)
-    setQuickGoal('protein')
+    setQuickGoal(null)
     setView('home')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -252,10 +290,10 @@ export default function App() {
   const startQuickCompare = () => {
     setProducts([createEmptyProduct(0), createEmptyProduct(1)])
     setRecognitionSessions({})
+    setRecognitionQueue({ pendingProductIds: [] })
     setShowProductValidation(false)
-    setQuickGoal('protein')
-    setGoal('proteinDensity')
-    setView('quick-capture')
+    setQuickGoal(null)
+    setView('quick-upload')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -263,9 +301,8 @@ export default function App() {
     const demoProducts = cloneMockProducts()
     changeProducts(demoProducts)
     setRecognitionSessions(demoRecognitionSessions(demoProducts))
-    setQuickGoal('protein')
-    setGoal('proteinDensity')
-    setView('quick-results')
+    setQuickGoal(null)
+    setView('quick-result')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -277,8 +314,13 @@ export default function App() {
 
   const changeQuickGoal = (nextGoal: QuickGoal) => {
     setQuickGoal(nextGoal)
-    const mapped = quickGoalToComparisonGoal[nextGoal]
-    if (mapped) setGoal(mapped)
+  }
+
+  const changeQuickPreference = (value: string) => {
+    setCustomRequirementText(value)
+    const parsed = parseCustomRequirements(value)
+    setCustomRequirementRules(parsed.rules)
+    setUnresolvedPreferences(parsed.unresolvedPreferences)
   }
 
   return (
@@ -293,31 +335,53 @@ export default function App() {
             onAdvanced={() => enterAdvanced(1)}
           />
         )}
-        {view === 'quick-capture' && (
+        {view === 'quick-upload' && (
           <QuickCompareStep
             products={products}
             calculated={calculated}
             recognitionSessions={recognitionSessions}
+            recognitionQueue={recognitionQueue}
             onProductsChange={changeProducts}
             onRecognitionSessionChange={(productId, session) =>
               setRecognitionSessions((current) => ({ ...current, [productId]: session }))
             }
+            onRecognitionQueueChange={setRecognitionQueue}
             onBack={() => setView('home')}
             onReady={() => {
-              setView('quick-results')
+              setView('quick-result')
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+            onReview={() => {
+              setReviewAllRecognitionFields(false)
+              setView('quick-review')
               window.scrollTo({ top: 0, behavior: 'smooth' })
             }}
             onAdvanced={() => enterAdvanced(2)}
           />
         )}
-        {view === 'quick-results' && (
+        {view === 'quick-review' && (
+          <QuickRecognitionReview
+            products={products}
+            sessions={recognitionSessions}
+            onProductsChange={changeProducts}
+            onSessionChange={(productId, session) =>
+              setRecognitionSessions((current) => ({ ...current, [productId]: session }))
+            }
+            onBack={() => setView('quick-upload')}
+            onContinue={() => {
+              setView('quick-result')
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+            showAllFields={reviewAllRecognitionFields}
+          />
+        )}
+        {view === 'quick-result' && (
           <QuickResults
             products={products}
             calculated={calculated}
             claimChecks={claimChecks}
             rankings={rankings}
             quickGoal={quickGoal}
-            goal={goal}
             budgets={budgets}
             concernWords={concernWords}
             customRequirementText={customRequirementText}
@@ -325,14 +389,33 @@ export default function App() {
             unresolvedPreferences={unresolvedPreferences}
             customRequirementEvaluation={customRequirementEvaluation}
             onQuickGoalChange={changeQuickGoal}
-            onCustomRequirementTextChange={(value) => {
-              setCustomRequirementText(value)
-              const parsed = parseCustomRequirements(value)
-              setCustomRequirementRules(parsed.rules)
-              setUnresolvedPreferences(parsed.unresolvedPreferences)
-            }}
+            onCustomRequirementTextChange={changeQuickPreference}
             onCustomRequirementRulesChange={setCustomRequirementRules}
-            onEdit={() => setView('quick-capture')}
+            onEdit={() => {
+              setReviewAllRecognitionFields(true)
+              setView('quick-review')
+            }}
+            onSupplement={() => setView('quick-upload')}
+            onContinue={() => {
+              setView('quick-analysis')
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+            onRestart={restart}
+          />
+        )}
+        {view === 'quick-analysis' && (
+          <QuickFullAnalysis
+            products={products}
+            calculated={calculated}
+            claimChecks={claimChecks}
+            rankings={rankings}
+            quickGoal={quickGoal}
+            budgets={budgets}
+            customRequirementText={customRequirementText}
+            customRequirementRules={customRequirementRules}
+            unresolvedPreferences={unresolvedPreferences}
+            customRequirementEvaluation={customRequirementEvaluation}
+            onBack={() => setView('quick-result')}
             onRestart={restart}
           />
         )}

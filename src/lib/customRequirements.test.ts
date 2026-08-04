@@ -50,6 +50,33 @@ describe('custom requirement rules', () => {
     ])
   })
 
+  it('does not map vague wellness or illness language to calorie or nutrition rules', () => {
+    const parsed = parseCustomRequirements(
+      '想要健康一点，我最近感冒了，想吃得好一点，适合身体，更有营养',
+    )
+
+    expect(parsed.rules).toEqual([])
+    expect(parsed.unresolvedPreferences).toEqual([
+      '想要健康一点',
+      '我最近感冒了',
+      '想吃得好一点',
+      '适合身体',
+      '更有营养',
+    ])
+    expect(parsed.rules.map((rule) => rule.kind)).not.toContain('packageCaloriesMax')
+  })
+
+  it('treats a direct white-sugar exclusion as a deterministic label rule', () => {
+    const parsed = parseCustomRequirements('不想要白砂糖')
+
+    expect(parsed.rules).toHaveLength(1)
+    expect(parsed.rules[0]).toMatchObject({
+      kind: 'excludeIngredientTerm',
+      term: '白砂糖',
+    })
+    expect(parsed.unresolvedPreferences).toEqual([])
+  })
+
   it('generates per-product evidence for multiple deterministic constraints', () => {
     const rules = parseCustomRequirements(
       '价格不超过7元，整包热量不超过150千卡，蛋白质至少10克',

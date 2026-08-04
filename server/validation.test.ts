@@ -70,6 +70,20 @@ export function validAnalyzeInput(): AnalyzeInput {
     ],
   }))
   return {
+    rawPreference: '',
+    quickGoal: 'protein',
+    confirmedProducts: products,
+    deterministicMetrics: calculated,
+    availableDimensions: ['能量', '蛋白质', '脂肪', '碳水化合物', '钠'],
+    missingDimensions: [],
+    localComparison: {
+      status: 'full',
+      preferredId: products[0].id,
+      compared: ['能量', '蛋白质', '脂肪', '碳水化合物', '钠'],
+      summary: 'A更符合本地确定性目标。',
+    },
+    safetyBoundary: '不得提供医疗诊断、治疗方案或个性化医疗营养建议。',
+    requestFingerprint: 'v1-test-request',
     goal: 'proteinDensity',
     budgets: { calories: '150', protein: '15', price: '10' },
     products,

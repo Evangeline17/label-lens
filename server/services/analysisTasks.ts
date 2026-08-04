@@ -43,6 +43,9 @@ interface InternalTaskRecord {
   report?: string
   normalized?: boolean
   normalizationWarnings?: string[]
+  reportMode?: 'structured' | 'partial' | 'raw'
+  rawResult?: unknown
+  requestFingerprint: string
   error?: string
   localWaitEnded: boolean
   release?: () => void
@@ -93,6 +96,7 @@ export class AnalysisTaskManager {
         payloadStats: stats,
       },
       payloadStats: stats,
+      requestFingerprint: input.requestFingerprint,
       service,
       localWaitEnded: false,
       release: options.release,
@@ -113,12 +117,17 @@ export class AnalysisTaskManager {
     })
     const recovered = await service.recoverTask(taskId)
 
-    if (!record) return recovered
+    if (!record) {
+      const { rawResult: _rawResult, ...publicRecovered } = recovered
+      return publicRecovered
+    }
     if (recovered.status === 'completed') {
       record.status = 'completed'
       record.report = recovered.report
       record.normalized = recovered.normalized
       record.normalizationWarnings = recovered.normalizationWarnings
+      record.reportMode = recovered.reportMode
+      record.rawResult = recovered.rawResult
       record.progress = '分析完成'
       this.release(record)
     } else if (recovered.status === 'failed') {
@@ -131,6 +140,7 @@ export class AnalysisTaskManager {
     } else if (recovered.status === 'format_error') {
       record.status = 'format_error'
       record.error = recovered.error
+      record.rawResult = recovered.rawResult
       this.release(record)
     } else if (recovered.status === 'unknown') {
       record.status = 'unknown'
@@ -165,6 +175,7 @@ export class AnalysisTaskManager {
         inputSummary: TaskInputSummary
         payloadStats: CompactPayloadStats
         localWaitEnded: boolean
+        requestFingerprint: string
       }
     | undefined {
     const record = this.records.get(taskId)
@@ -177,6 +188,7 @@ export class AnalysisTaskManager {
       inputSummary: record.inputSummary,
       payloadStats: record.payloadStats,
       localWaitEnded: record.localWaitEnded,
+      requestFingerprint: record.requestFingerprint,
     }
   }
 
@@ -197,6 +209,7 @@ export class AnalysisTaskManager {
       localWaitEnded: record.localWaitEnded,
       normalized: record.normalized,
       normalizationWarnings: record.normalizationWarnings,
+      reportMode: record.reportMode,
     }
   }
 }

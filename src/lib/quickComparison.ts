@@ -2,6 +2,7 @@ import { observeIngredients } from './claimChecks'
 import { formatCurrency, formatMetric, toNonNegativeNumber } from './calculations'
 import type {
   CalculatedProduct,
+  ComparisonGoal,
   LabelRecognitionDraft,
   Product,
 } from '../types'
@@ -13,6 +14,7 @@ export type QuickGoal =
   | 'fat'
   | 'sodium'
   | 'value'
+  | 'overall'
 
 export type ProgressiveResultStatus = 'full' | 'partial' | 'insufficient'
 
@@ -23,6 +25,56 @@ export const quickGoalLabels: Record<QuickGoal, string> = {
   fat: '低脂',
   sodium: '低钠',
   value: '价格划算',
+  overall: '只看综合差异',
+}
+
+const quickGoalComparisonGoals: Record<QuickGoal, ComparisonGoal> = {
+  protein: 'proteinDensity',
+  calories: 'calories',
+  sugar: 'balance',
+  fat: 'balance',
+  sodium: 'sodium',
+  value: 'proteinValue',
+  overall: 'balance',
+}
+
+export function comparisonGoalForQuickGoal(goal: QuickGoal): ComparisonGoal {
+  return quickGoalComparisonGoals[goal]
+}
+
+export interface QuickPreferenceClassification {
+  explicitGoal: QuickGoal | null
+  hasGeneralPreference: boolean
+  hasMedicalContext: boolean
+}
+
+const medicalContextPattern =
+  /感冒|发烧|胃(?:不舒服|痛|病)|血糖(?:高|低|异常)|糖尿病|高血压|低血压|正在(?:吃|服)药|吃药|服药|用药|治疗|诊断/
+const generalPreferencePattern =
+  /健康一点|吃得好一点|更有营养|整体看看|综合看看|适合身体|想健康|吃好一点/
+
+export function classifyQuickPreference(value: string): QuickPreferenceClassification {
+  const normalized = value.trim()
+  const explicitGoal: QuickGoal | null = /高蛋白|蛋白质(?:更)?高/.test(normalized)
+    ? 'protein'
+    : /低热量|少热量|热量(?:更)?低/.test(normalized)
+      ? 'calories'
+      : /少糖|低糖/.test(normalized)
+        ? 'sugar'
+        : /低脂|少脂肪|脂肪(?:更)?低/.test(normalized)
+          ? 'fat'
+          : /低钠|少盐|少钠/.test(normalized)
+            ? 'sodium'
+            : /价格划算|性价比|更便宜/.test(normalized)
+              ? 'value'
+              : /只看综合差异|综合差异/.test(normalized)
+                ? 'overall'
+                : null
+  return {
+    explicitGoal,
+    hasGeneralPreference: generalPreferencePattern.test(normalized),
+    hasMedicalContext: medicalContextPattern.test(normalized),
+  }
 }
 
 export interface MissingRecognitionField {
@@ -236,13 +288,13 @@ export function getProgressiveComparison(
 
   const unavailable: string[] = []
   const packageMissing = products.filter((product) => !product.netContent.trim())
-  if (packageMissing.length) unavailable.push('整包数据：缺少净含量')
+  if (packageMissing.length) unavailable.push('净含量未识别，因此暂不比较整包数据')
   const priceMissing = products.filter((product) => !product.price.trim())
-  if (priceMissing.length) unavailable.push('价格：未录入')
+  if (priceMissing.length) unavailable.push('价格未录入，因此暂不比较性价比')
   const ingredientsMissing = products.filter((product) => !product.ingredients.trim())
   if (ingredientsMissing.length) {
     unavailable.push(
-      `配料：${ingredientsMissing.map((product) => fallbackName(product, products.indexOf(product))).join('、')}未拍到配料表`,
+      `${ingredientsMissing.map((product) => fallbackName(product, products.indexOf(product))).join('、')}未拍到配料表，因此暂不比较配料`,
     )
   }
   metricDefinitions.slice(0, 5).forEach((definition) => {
@@ -254,8 +306,12 @@ export function getProgressiveComparison(
 
   const target = definitionForGoal(goal)
   const targetEntries = target ? metricEntries(target, products, calculated) : []
-  const targetComparable = targetEntries.length >= 2
-  const targetComplete = Boolean(target && targetEntries.length === products.length)
+  const targetComparable =
+    goal === 'overall' ? commonDimensionCount > 0 : targetEntries.length >= 2
+  const targetComplete =
+    goal === 'overall'
+      ? commonDimensionCount > 0
+      : Boolean(target && targetEntries.length === products.length)
   if (goal === 'sugar') {
     unavailable.unshift('糖含量：包装未提供明确字段')
   } else if (target && !targetComplete) {
@@ -268,7 +324,9 @@ export function getProgressiveComparison(
 
   const direction: 'min' | 'max' = goal === 'protein' ? 'max' : 'min'
   const preferredId =
-    status === 'full' ? uniqueWinner(targetEntries, direction) : null
+    status === 'full' && goal !== 'overall'
+      ? uniqueWinner(targetEntries, direction)
+      : null
 
   return {
     status,
@@ -288,16 +346,19 @@ export function getQuickReason(
   assessment: ProgressiveComparison,
 ): string {
   if (assessment.status === 'insufficient') {
-    return '目前没有任何共同可比较维度，先补拍最关键的标签信息。'
+    return '补充一项两款商品都具备的标签数据后，就能开始比较。'
   }
   if (!assessment.targetComplete) {
     if (goal === 'sugar') {
-      return '当前无法按少糖排序：配料表只能提示糖类配料，不能代替明确糖含量。'
+      return '已先比较现有标签差异；糖含量未明确，因此本次不做糖含量排序。'
     }
-    return `当前无法按“${quickGoalLabels[goal]}”排序；已识别的数据仍保留在下方局部比较中。`
+    return `已先比较现有标签差异；补充目标字段后可继续按“${quickGoalLabels[goal]}”排序。`
   }
   if (assessment.status === 'partial') {
-    return '目前只有一个共同指标，先展示局部差异，不强行给出综合推荐。'
+    return `本次已比较 ${assessment.compared.length} 项，完整分析会同时说明尚缺少的信息。`
+  }
+  if (goal === 'overall') {
+    return `已按综合差异进行比较，本次已比较 ${assessment.compared.length} 项标签信息。`
   }
   if (!preferred) return '当前目标数据完整，但数值接近，因此没有唯一首选。'
   const name = preferred.name.trim() || '该商品'
@@ -308,6 +369,7 @@ export function getQuickReason(
     fat: `${name} 的每100单位脂肪更低。`,
     sodium: `${name} 的每100单位钠更低。`,
     value: `${name} 获得同等蛋白质所需花费更少。`,
+    overall: `已按综合差异进行比较，本次已比较 ${assessment.compared.length} 项标签信息。`,
   }
   return reasons[goal]
 }

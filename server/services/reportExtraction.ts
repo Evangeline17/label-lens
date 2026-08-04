@@ -71,12 +71,12 @@ export class ReportFormatError extends Error {
 }
 
 export function agentMessageText(message: AgentMessage): string | null {
-  for (const key of ['text', 'content', 'answer', 'result'] as const) {
+  for (const key of ['text', 'content', 'answer', 'result', 'completion_result', 'output', 'data'] as const) {
     const value = message[key]
     if (typeof value === 'string' && value.trim()) return value.trim()
     if (value && typeof value === 'object' && !Array.isArray(value)) {
       const nested = value as Record<string, unknown>
-      for (const nestedKey of ['text', 'content', 'markdown']) {
+      for (const nestedKey of ['text', 'content', 'markdown', 'userFacingAnalysis', 'completion_result']) {
         const nestedValue = nested[nestedKey]
         if (typeof nestedValue === 'string' && nestedValue.trim()) return nestedValue.trim()
       }
@@ -162,7 +162,13 @@ function headingLines(report: string, heading: string): HeadingLine[] {
 }
 
 export function isFinalUserVisibleMessage(message: AgentMessage): boolean {
-  return isCompletionMessage(message) && Boolean(agentMessageText(message))
+  return (
+    isCompletionMessage(message) &&
+    (Boolean(agentMessageText(message)) ||
+      ['completion_result', 'result', 'data', 'output', 'content', 'answer'].some(
+        (key) => message[key] !== undefined && message[key] !== null,
+      ))
+  )
 }
 
 function validateHardReport(candidate: string): string {
@@ -231,6 +237,7 @@ export interface ValidatedReport {
   report: string
   normalized: boolean
   normalizationWarnings: string[]
+  reportMode: 'structured' | 'partial' | 'raw'
 }
 
 export function validateAndNormalizeReport(
@@ -248,6 +255,7 @@ export function validateAndNormalizeReport(
     report: finalReport,
     normalized: normalization.normalized,
     normalizationWarnings: normalization.normalizationWarnings,
+    reportMode: 'structured',
   }
 }
 
@@ -256,4 +264,263 @@ export function validateAndSanitizeReport(
   payload?: CompactAnalyzePayload,
 ): string {
   return validateAndNormalizeReport(candidate, payload).report
+}
+
+type AnalysisRequirementType = 'hard' | 'soft' | 'context' | 'unsupported'
+
+interface FlexibleAnalysisReport {
+  intentSummary: string
+  interpretedRequirements: Array<{
+    originalText: string
+    type: AnalysisRequirementType
+    evaluable: boolean
+    explanation: string
+  }>
+  recommendation: {
+    type: 'winner' | 'tradeoff' | 'insufficient'
+    productId: string | null
+    summary: string
+  }
+  evidence: Array<{
+    dimension: string
+    statement: string
+    source: string
+  }>
+  limitations: string[]
+  userFacingAnalysis: string
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function firstString(record: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return ''
+}
+
+function extractJsonValues(text: string): unknown[] {
+  const candidates = [text.trim()]
+  for (const match of text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)) {
+    if (match[1]?.trim()) candidates.push(match[1].trim())
+  }
+  const firstBrace = text.indexOf('{')
+  const lastBrace = text.lastIndexOf('}')
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    candidates.push(text.slice(firstBrace, lastBrace + 1))
+  }
+  const values: unknown[] = []
+  for (const candidate of [...new Set(candidates)]) {
+    try {
+      let parsed: unknown = JSON.parse(candidate)
+      if (typeof parsed === 'string') {
+        try {
+          parsed = JSON.parse(parsed)
+        } catch {
+          // Keep the decoded string as a raw-text candidate.
+        }
+      }
+      values.push(parsed)
+    } catch {
+      // Try the next candidate or the raw-text fallback.
+    }
+  }
+  return values
+}
+
+function structuredCandidates(value: unknown, depth = 0): Record<string, unknown>[] {
+  if (depth > 5) return []
+  if (typeof value === 'string') {
+    return extractJsonValues(value).flatMap((item) => structuredCandidates(item, depth + 1))
+  }
+  if (!isRecord(value)) return []
+  const candidates = [value]
+  for (const key of ['completion_result', 'result', 'data', 'output', 'content', 'answer', 'text']) {
+    if (key in value) candidates.push(...structuredCandidates(value[key], depth + 1))
+  }
+  return candidates
+}
+
+function normalizeRequirement(value: unknown): FlexibleAnalysisReport['interpretedRequirements'][number] | null {
+  if (!isRecord(value)) return null
+  const typeValue = firstString(value, ['type', 'kind'])
+  const type: AnalysisRequirementType = ['hard', 'soft', 'context', 'unsupported'].includes(typeValue)
+    ? (typeValue as AnalysisRequirementType)
+    : 'unsupported'
+  const originalText = firstString(value, ['originalText', 'original_text', 'original', 'text'])
+  const explanation = firstString(value, ['explanation', 'handling', 'summary'])
+  if (!originalText && !explanation) return null
+  return {
+    originalText,
+    type,
+    evaluable: typeof value.evaluable === 'boolean' ? value.evaluable : type === 'hard',
+    explanation,
+  }
+}
+
+function normalizeEvidence(value: unknown): FlexibleAnalysisReport['evidence'][number] | null {
+  if (!isRecord(value)) return null
+  const statement = firstString(value, ['statement', 'summary', 'text', 'evidence'])
+  if (!statement) return null
+  return {
+    dimension: firstString(value, ['dimension', 'metric', 'field']),
+    statement,
+    source: firstString(value, ['source']) || 'deterministicMetrics',
+  }
+}
+
+function normalizeStructuredReport(value: Record<string, unknown>): {
+  report: FlexibleAnalysisReport
+  complete: boolean
+} | null {
+  const recommendationValue = value.recommendation ?? value.recommend
+  const recommendationRecord = isRecord(recommendationValue) ? recommendationValue : {}
+  const recommendationSummary =
+    typeof recommendationValue === 'string'
+      ? recommendationValue.trim()
+      : firstString(recommendationRecord, ['summary', 'conclusion', 'text']) ||
+        firstString(value, ['recommendationSummary', 'recommendation_summary', 'summary'])
+  const userFacingAnalysis = firstString(value, [
+    'userFacingAnalysis',
+    'user_facing_analysis',
+    'analysis',
+    'report',
+    'markdown',
+  ])
+  if (!recommendationSummary && !userFacingAnalysis) return null
+
+  const recommendationTypeValue = firstString(recommendationRecord, ['type'])
+  const recommendationType = ['winner', 'tradeoff', 'insufficient'].includes(
+    recommendationTypeValue,
+  )
+    ? (recommendationTypeValue as FlexibleAnalysisReport['recommendation']['type'])
+    : 'tradeoff'
+  const productIdValue = recommendationRecord.productId ?? recommendationRecord.product_id
+  const requirementValues = value.interpretedRequirements ?? value.interpreted_requirements
+  const evidenceValues = value.evidence ?? value.evidences
+  const limitationValues = value.limitations ?? value.missingDimensions
+  const interpretedRequirements = Array.isArray(requirementValues)
+    ? requirementValues.map(normalizeRequirement).filter((item): item is NonNullable<typeof item> => item !== null)
+    : []
+  const evidence = Array.isArray(evidenceValues)
+    ? evidenceValues.map(normalizeEvidence).filter((item): item is NonNullable<typeof item> => item !== null)
+    : []
+  const limitations = Array.isArray(limitationValues)
+    ? limitationValues.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())).map((item) => item.trim())
+    : []
+  const complete =
+    typeof value.intentSummary === 'string' &&
+    Array.isArray(requirementValues) &&
+    isRecord(recommendationValue) &&
+    Array.isArray(evidenceValues) &&
+    Array.isArray(limitationValues) &&
+    Boolean(userFacingAnalysis)
+  return {
+    complete,
+    report: {
+      intentSummary: firstString(value, ['intentSummary', 'intent_summary', 'intent']),
+      interpretedRequirements,
+      recommendation: {
+        type: recommendationType,
+        productId: typeof productIdValue === 'string' && productIdValue.trim()
+          ? productIdValue.trim()
+          : null,
+        summary: recommendationSummary,
+      },
+      evidence,
+      limitations,
+      userFacingAnalysis,
+    },
+  }
+}
+
+function structuredMarkdown(report: FlexibleAnalysisReport): string {
+  const sections: string[] = []
+  if (report.intentSummary) sections.push(`# 需求理解\n\n${report.intentSummary}`)
+  if (report.recommendation.summary) {
+    sections.push(`# 本次结论\n\n${report.recommendation.summary}`)
+  }
+  if (report.userFacingAnalysis) sections.push(`# 完整分析\n\n${report.userFacingAnalysis}`)
+  if (report.interpretedRequirements.length) {
+    sections.push(
+      `# 要求处理\n\n${report.interpretedRequirements
+        .map((item) => `- ${item.originalText || '未命名要求'}：${item.explanation || item.type}`)
+        .join('\n')}`,
+    )
+  }
+  if (report.evidence.length) {
+    sections.push(
+      `# 主要依据\n\n${report.evidence
+        .map((item) => `- ${item.statement}`)
+        .join('\n')}`,
+    )
+  }
+  if (report.limitations.length) {
+    sections.push(`# 还需注意\n\n${report.limitations.map((item) => `- ${item}`).join('\n')}`)
+  }
+  return sections.join('\n\n')
+}
+
+function rawTextCandidates(value: unknown, depth = 0): string[] {
+  if (depth > 5) return []
+  if (typeof value === 'string') {
+    const normalized = unwrapMarkdownFence(normalizeText(value))
+    return normalized ? [normalized] : []
+  }
+  if (!isRecord(value)) return []
+  return ['completion_result', 'result', 'data', 'output', 'content', 'answer', 'text']
+    .flatMap((key) => key in value ? rawTextCandidates(value[key], depth + 1) : [])
+}
+
+function safeRawText(value: string): string | null {
+  const text = normalizeText(value).slice(0, MAX_REPORT_LENGTH)
+  if (!text || /^\{\s*\}$/.test(text) || /^\[\s*\]$/.test(text)) return null
+  if (forbiddenPatterns.some((forbidden) => forbidden.pattern.test(text))) return null
+  if (/^(?:任务|task)\s*(?:已)?(?:完成|complete(?:d)?)\s*[。.!]?$/i.test(text)) return null
+  return text
+}
+
+/** Layered parser used for completed analysis tasks. Strict Markdown remains
+ * preferred, while partial JSON and safe visible text are valid fallbacks. */
+export function parseFlexibleReport(
+  candidate: unknown,
+  payload?: CompactAnalyzePayload,
+): ValidatedReport | null {
+  if (typeof candidate === 'string') {
+    try {
+      return validateAndNormalizeReport(candidate, payload)
+    } catch {
+      // Continue with structured and raw-text fallbacks.
+    }
+  }
+
+  for (const structuredCandidate of structuredCandidates(candidate)) {
+    const normalized = normalizeStructuredReport(structuredCandidate)
+    if (!normalized) continue
+    const markdown = structuredMarkdown(normalized.report)
+    const boundary = normalizeReportBoundaries(markdown, payload)
+    return {
+      report: boundary.report,
+      normalized: boundary.normalized,
+      normalizationWarnings: boundary.normalizationWarnings,
+      reportMode: normalized.complete ? 'structured' : 'partial',
+    }
+  }
+
+  for (const rawCandidate of rawTextCandidates(candidate)) {
+    const safe = safeRawText(rawCandidate)
+    if (!safe) continue
+    const boundary = normalizeReportBoundaries(safe, payload)
+    if (!boundary.report.trim()) continue
+    return {
+      report: boundary.report,
+      normalized: boundary.normalized,
+      normalizationWarnings: boundary.normalizationWarnings,
+      reportMode: 'raw',
+    }
+  }
+  return null
 }

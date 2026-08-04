@@ -8,9 +8,10 @@ interface Props {
   label: string
   preview?: PhotoPreview
   onChange: (preview?: PhotoPreview) => void
+  disabled?: boolean
 }
 
-export function PhotoUpload({ id, label, preview, onChange }: Props) {
+export function PhotoUpload({ id, label, preview, onChange, disabled = false }: Props) {
   const [error, setError] = useState('')
   const [compressing, setCompressing] = useState(false)
 
@@ -61,8 +62,9 @@ export function PhotoUpload({ id, label, preview, onChange }: Props) {
             </p>
             <button
               type="button"
+              disabled={disabled}
               onClick={() => onChange(undefined)}
-              className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-brick"
+              className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-brick disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Trash2 size={14} aria-hidden="true" />
               删除图片
@@ -72,7 +74,7 @@ export function PhotoUpload({ id, label, preview, onChange }: Props) {
       ) : (
         <label
           htmlFor={id}
-          className="flex min-h-16 min-w-0 cursor-pointer flex-wrap items-center justify-center gap-2 rounded-xl px-2 text-center text-sm font-bold leading-5 text-stone-600 transition hover:bg-white hover:text-orange"
+          className={`flex min-h-16 min-w-0 flex-wrap items-center justify-center gap-2 rounded-xl px-2 text-center text-sm font-bold leading-5 text-stone-600 transition ${disabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer hover:bg-white hover:text-orange'}`}
         >
           <ImagePlus size={18} aria-hidden="true" />
           {compressing ? '正在压缩图片…' : label}
@@ -83,7 +85,7 @@ export function PhotoUpload({ id, label, preview, onChange }: Props) {
         className="sr-only"
         type="file"
         accept="image/jpeg,image/png,image/webp"
-        disabled={compressing}
+        disabled={compressing || disabled}
         onChange={handleFile}
       />
       {error && (

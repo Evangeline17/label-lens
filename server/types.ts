@@ -134,6 +134,20 @@ export interface AnalyzeCustomRequirementEvaluation {
 }
 
 export interface AnalyzeInput {
+  rawPreference: string
+  quickGoal: 'protein' | 'calories' | 'sugar' | 'fat' | 'sodium' | 'value' | 'overall' | null
+  confirmedProducts: AnalyzeProduct[]
+  deterministicMetrics: AnalyzeCalculatedProduct[]
+  availableDimensions: string[]
+  missingDimensions: string[]
+  localComparison: {
+    status: 'full' | 'partial' | 'insufficient' | 'advanced'
+    preferredId: string | null
+    compared: string[]
+    summary: string
+  }
+  safetyBoundary: string
+  requestFingerprint: string
   goal: AnalyzeGoal
   budgets: AnalyzeBudgets
   products: AnalyzeProduct[]
@@ -153,6 +167,8 @@ export interface InfiniSynapseResult {
   report: string
   normalized?: boolean
   normalizationWarnings?: string[]
+  reportMode?: 'structured' | 'partial' | 'raw'
+  rawResult?: unknown
 }
 
 export type LabelImageKind = 'ingredients' | 'nutrition'
@@ -192,6 +208,7 @@ export interface LabelRecognitionTaskResult {
 export interface LabelRecognitionTaskStatusResult {
   status: AnalyzeTaskStatus
   taskId: string
+  connId?: string
   createdAt?: string
   progress?: string
   result?: LabelRecognitionResult
@@ -219,6 +236,8 @@ export interface AnalyzeTaskStatusResult {
   localWaitEnded?: boolean
   normalized?: boolean
   normalizationWarnings?: string[]
+  reportMode?: 'structured' | 'partial' | 'raw'
+  rawResult?: unknown
 }
 
 export interface CompactProduct {
@@ -254,6 +273,22 @@ export interface CompactProduct {
 }
 
 export interface CompactAnalyzePayload {
+  rawPreference: string
+  quickGoal: AnalyzeInput['quickGoal']
+  confirmedProducts: CompactProduct[]
+  deterministicMetrics: Array<{
+    product: string
+    name: string
+    per100?: CompactProduct['per100']
+    perPackage?: CompactProduct['perPackage']
+    efficiency?: CompactProduct['efficiency']
+    currentBudgets?: CompactProduct['currentBudgets']
+  }>
+  availableDimensions: string[]
+  missingDimensions: string[]
+  localComparison: AnalyzeInput['localComparison']
+  safetyBoundary: string
+  requestFingerprint: string
   goal: {
     key: AnalyzeGoal
     label: string

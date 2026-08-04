@@ -4,6 +4,8 @@ import { cloneMockProducts, createEmptyProduct } from '../data/mockProducts'
 import { recognitionResultToDraft } from './labelRecognition'
 import {
   applyReliableRecognitionDraft,
+  classifyQuickPreference,
+  comparisonGoalForQuickGoal,
   getIngredientHints,
   getMissingRecognitionFields,
   getProgressiveComparison,
@@ -42,7 +44,7 @@ describe('progressive quick comparison', () => {
     expect(result.compared).toContain('能量')
     expect(result.compared).toContain('蛋白质')
     expect(result.compared).not.toContain('蛋白质性价比')
-    expect(result.unavailable).toContain('价格：未录入')
+    expect(result.unavailable).toContain('价格未录入，因此暂不比较性价比')
   })
 
   it('omits an ingredient conclusion for a product whose ingredient list is missing', () => {
@@ -145,6 +147,29 @@ describe('progressive quick comparison', () => {
     expect(result.preferredId).toBeNull()
     expect(result.unavailable).toContain('糖含量：包装未提供明确字段')
     expect(getIngredientHints(products)).toHaveLength(2)
+  })
+
+  it('classifies vague wellness as comprehensive without mapping it to calories', () => {
+    const preference = classifyQuickPreference('想健康一点，整体看看')
+
+    expect(preference).toEqual({
+      explicitGoal: null,
+      hasGeneralPreference: true,
+      hasMedicalContext: false,
+    })
+    expect(comparisonGoalForQuickGoal('overall')).toBe('balance')
+    expect(comparisonGoalForQuickGoal('overall')).not.toBe('calories')
+  })
+
+  it('separates medical context from an explicit food-label goal', () => {
+    expect(classifyQuickPreference('最近感冒了')).toMatchObject({
+      explicitGoal: null,
+      hasMedicalContext: true,
+    })
+    expect(classifyQuickPreference('想选高蛋白的')).toMatchObject({
+      explicitGoal: 'protein',
+      hasMedicalContext: false,
+    })
   })
 
   it('reports only recognition fields that are actually missing', () => {

@@ -119,7 +119,7 @@ describe('InfiniSynapseService', () => {
     expect(calls.some((call) => /newTask|cancelTask/.test(call.url))).toBe(false)
   })
 
-  it('returns format_error for a completed task with no valid final report', async () => {
+  it('falls back to safe raw text when a completed task lacks the strict report format', async () => {
     const taskId = '5a7971a0-16b2-4ef2-ba2a-8236d5907524'
     const calls: Array<{ url: string; method: string }> = []
     const invalidMessages = {
@@ -145,11 +145,11 @@ describe('InfiniSynapseService', () => {
 
     const result = await service.recoverTask(taskId)
 
-    expect(result).toEqual({
-      status: 'format_error',
-      taskId,
-      error: '任务已完成，但最终报告格式未通过校验。',
-    })
+    expect(result.status).toBe('completed')
+    expect(result.taskId).toBe(taskId)
+    expect(result.reportMode).toBe('raw')
+    expect(result.report).toContain('最终结论摘要')
+    expect(result.rawResult).toBeDefined()
     expect(calls.every((call) => call.method === 'GET')).toBe(true)
     expect(calls.some((call) => /\/api\/ai\/message/.test(call.url))).toBe(false)
   })

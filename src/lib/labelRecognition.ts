@@ -6,7 +6,7 @@ import type {
   Product,
 } from '../types'
 
-interface RecognitionStatusResponse {
+export interface RecognitionStatusResponse {
   status:
     | 'processing'
     | 'completed'
@@ -15,12 +15,26 @@ interface RecognitionStatusResponse {
     | 'cancelled'
     | 'unknown'
   taskId: string
+  connId?: string
   createdAt?: string
   progress?: string
   result?: LabelRecognitionResult
   error?: string
   localWaitEnded?: boolean
   imageKinds?: Array<'ingredients' | 'nutrition'>
+}
+
+export class RecognitionHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly retryAfterMs?: number,
+    readonly taskId?: string,
+    readonly connId?: string,
+  ) {
+    super(message)
+    this.name = 'RecognitionHttpError'
+  }
 }
 
 function browserClientId(): string {
@@ -36,16 +50,41 @@ function browserClientId(): string {
   }
 }
 
-async function responseError(response: Response): Promise<string> {
+function retryAfterMs(response: Response): number | undefined {
+  const value = response.headers.get('Retry-After')?.trim()
+  if (!value) return undefined
+  const seconds = Number(value)
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1_000
+  const date = Date.parse(value)
+  if (!Number.isFinite(date)) return undefined
+  return Math.max(0, date - Date.now())
+}
+
+async function responseError(response: Response): Promise<RecognitionHttpError> {
+  let message = `服务端返回 HTTP ${response.status}，但没有提供可读的安全错误信息。`
+  let taskId: string | undefined
+  let connId: string | undefined
   try {
-    const body = (await response.json()) as { error?: unknown }
-    if (typeof body.error === 'string' && body.error.trim()) {
-      return `服务端返回 HTTP ${response.status}：${body.error.trim()}`
+    const body = (await response.json()) as {
+      error?: unknown
+      taskId?: unknown
+      connId?: unknown
     }
+    if (typeof body.error === 'string' && body.error.trim()) {
+      message = `服务端返回 HTTP ${response.status}：${body.error.trim()}`
+    }
+    if (typeof body.taskId === 'string') taskId = body.taskId
+    if (typeof body.connId === 'string') connId = body.connId
   } catch {
     // Fall back to the HTTP status.
   }
-  return `服务端返回 HTTP ${response.status}，但没有提供可读的安全错误信息。`
+  return new RecognitionHttpError(
+    message,
+    response.status,
+    retryAfterMs(response),
+    taskId,
+    connId,
+  )
 }
 
 async function recognitionFetch(
@@ -77,7 +116,7 @@ function isRecognitionStatus(value: unknown): value is RecognitionStatusResponse
 }
 
 async function parseStatus(response: Response): Promise<RecognitionStatusResponse> {
-  if (!response.ok) throw new Error(await responseError(response))
+  if (!response.ok) throw await responseError(response)
   const body: unknown = await response.json()
   if (!isRecognitionStatus(body)) throw new Error('服务端返回了未知的识别任务状态。')
   return body
@@ -186,6 +225,7 @@ export function mergeRecognitionStatus(
     status,
     stale: false,
     taskId: response.taskId,
+    connId: response.connId ?? current.connId,
     createdAt: response.createdAt ?? current.createdAt,
     progress: response.progress,
     result: response.result ?? current.result,
@@ -224,7 +264,12 @@ export function recognitionActionLabel(
   hasPhoto: boolean,
   session: LabelRecognitionSession,
 ): '识别当前商品标签' | '重新识别当前图片' | null {
-  if (!hasPhoto || session.status === 'starting' || session.status === 'processing') {
+  if (
+    !hasPhoto ||
+    session.status === 'queued' ||
+    session.status === 'starting' ||
+    session.status === 'processing'
+  ) {
     return null
   }
   return session.stale || session.status !== 'idle' || session.taskId || session.result

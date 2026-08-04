@@ -11,10 +11,10 @@ import {
   isCompletionMessage,
   isFinalUserVisibleMessage,
   isVisibleSayTextMessage,
+  parseFlexibleReport,
   REPORT_TITLE,
   ReportFormatError,
   REQUIRED_REPORT_HEADINGS,
-  validateAndNormalizeReport,
 } from './reportExtraction.js'
 import type { ValidatedReport } from './reportExtraction.js'
 import type {
@@ -74,11 +74,12 @@ interface RecognitionTaskFile extends TaskUploadData {
   fileType: 'reference'
 }
 
-class InfiniSynapseError extends Error {
+export class InfiniSynapseError extends Error {
   constructor(
     message: string,
     readonly code?: number,
     readonly httpStatus?: number,
+    readonly retryAfter?: string,
   ) {
     super(message)
     this.name = 'InfiniSynapseError'
@@ -358,6 +359,7 @@ interface ValidReportCandidate {
   report: string
   normalized: boolean
   normalizationWarnings: string[]
+  reportMode: 'structured' | 'partial' | 'raw'
   order: number
   sourceRank?: number
 }
@@ -545,6 +547,12 @@ export class InfiniSynapseService {
             fileType: 'reference',
           })
         } catch (error) {
+          if (
+            error instanceof InfiniSynapseError &&
+            (error.httpStatus === 429 || error.code === 429)
+          ) {
+            throw error
+          }
           const httpStatus =
             error instanceof InfiniSynapseError ? error.httpStatus : undefined
           throw new RecognitionUploadFlowError(
@@ -638,6 +646,7 @@ export class InfiniSynapseService {
           `无法建立 InfiniSynapse SSE 连接（HTTP ${response.status}）。`,
           undefined,
           response.status,
+          response.headers.get('Retry-After') ?? undefined,
         )
       }
       return response.body
@@ -679,6 +688,7 @@ export class InfiniSynapseService {
           envelope.message || `InfiniSynapse 接口请求失败（HTTP ${response.status}）。`,
           envelope.code,
           response.status,
+          response.headers.get('Retry-After') ?? undefined,
         )
       }
       if (typeof envelope.code === 'number' && envelope.code !== 200) {
@@ -689,6 +699,7 @@ export class InfiniSynapseService {
           envelope.message || `InfiniSynapse 返回业务错误码 ${envelope.code}。`,
           envelope.code,
           response.status,
+          response.headers.get('Retry-After') ?? undefined,
         )
       }
       return envelope.code === 200 && 'data' in envelope ? envelope.data : parsed
@@ -746,6 +757,7 @@ export class InfiniSynapseService {
           `InfiniSynapse 图片主动上传失败（HTTP ${response.status}）。`,
           code,
           response.status,
+          response.headers.get('Retry-After') ?? undefined,
         )
       }
       if (code !== 200) {
@@ -755,6 +767,7 @@ export class InfiniSynapseService {
             : `InfiniSynapse 图片主动上传返回业务错误码 ${code}。`,
           code,
           response.status,
+          response.headers.get('Retry-After') ?? undefined,
         )
       }
       const data = isRecord(envelope?.data) ? envelope.data : null
@@ -1034,6 +1047,12 @@ export class InfiniSynapseService {
       } catch (error) {
         if (
           error instanceof InfiniSynapseError &&
+          (error.httpStatus === 429 || error.code === 429)
+        ) {
+          throw error
+        }
+        if (
+          error instanceof InfiniSynapseError &&
           (error.httpStatus === 404 || error.code === 404)
         ) {
           notFound.add(key)
@@ -1057,6 +1076,7 @@ export class InfiniSynapseService {
     )
 
     const formatErrors: string[] = []
+    const rawResult = { taskInfo, uiMessages, workspace }
     const statuses = taskStatuses(taskInfo)
     const completionMessages = collectMessages(uiMessages)
     const hasCompletionResult = completionMessages.some(isCompletionMessage)
@@ -1068,7 +1088,7 @@ export class InfiniSynapseService {
         signal,
         formatErrors,
       )
-      if (workspaceReport) return { status: 'completed', taskId, ...workspaceReport }
+      if (workspaceReport) return { status: 'completed', taskId, ...workspaceReport, rawResult }
     }
 
     if (uiMessages) {
@@ -1077,17 +1097,18 @@ export class InfiniSynapseService {
         formatErrors,
         hasCompletedStatus || hasCompletionResult,
       )
-      if (uiReport) return { status: 'completed', taskId, ...uiReport }
+      if (uiReport) return { status: 'completed', taskId, ...uiReport, rawResult }
     }
 
     const failure = explicitFailure([taskInfo, uiMessages])
-    if (failure) return { status: 'failed', taskId, error: failure }
+    if (failure) return { status: 'failed', taskId, error: failure, rawResult }
     if (notFound.size === 3) return { status: 'not_found', taskId }
     if (hasCompletedStatus || hasCompletionResult) {
       return {
         status: 'format_error',
         taskId,
-        error: '任务已完成，但最终报告格式未通过校验。',
+        error: '任务已完成，但返回结果中没有可安全展示的分析文字。',
+        rawResult,
       }
     }
     if (hasStatus(statuses, RUNNING_STATUSES)) {
@@ -1115,6 +1136,12 @@ export class InfiniSynapseService {
       try {
         return await this.request(path, { method: 'GET', signal })
       } catch (error) {
+        if (
+          error instanceof InfiniSynapseError &&
+          (error.httpStatus === 429 || error.code === 429)
+        ) {
+          throw error
+        }
         if (
           error instanceof InfiniSynapseError &&
           (error.httpStatus === 404 || error.code === 404)
@@ -1245,16 +1272,13 @@ export class InfiniSynapseService {
   }
 
   private acceptReportCandidate(
-    candidate: string,
+    candidate: unknown,
     formatErrors: string[],
     payload?: CompactAnalyzePayload,
   ): ValidatedReport | null {
-    try {
-      return validateAndNormalizeReport(candidate, payload)
-    } catch (error) {
-      if (error instanceof ReportFormatError) formatErrors.push(error.message)
-      return null
-    }
+    const result = parseFlexibleReport(candidate, payload)
+    if (!result) formatErrors.push('候选结果中没有可安全展示的分析文字')
+    return result
   }
 
   private async resolveWorkspaceReport(
@@ -1308,23 +1332,18 @@ export class InfiniSynapseService {
     const completionCandidates: ValidReportCandidate[] = []
     messages.forEach((message, order) => {
       if (!isFinalUserVisibleMessage(message)) return
-      const text = agentMessageText(message)
-      if (!text) return
-      const accepted = this.acceptReportCandidate(text, formatErrors, payload)
+      const accepted = this.acceptReportCandidate(message, formatErrors, payload)
       if (accepted) completionCandidates.push({ ...accepted, order })
     })
     const completionReport = bestReportCandidate(completionCandidates)
-    if (completionReport) return completionReport
-    if (!allowVisibleFallback) return null
+    if (!allowVisibleFallback) return completionReport
     const visibleCandidates: ValidReportCandidate[] = []
     messages.forEach((message, order) => {
       if (!isVisibleSayTextMessage(message)) return
-      const text = agentMessageText(message)
-      if (!text) return
-      const accepted = this.acceptReportCandidate(text, formatErrors, payload)
+      const accepted = this.acceptReportCandidate(message, formatErrors, payload)
       if (accepted) visibleCandidates.push({ ...accepted, order })
     })
-    return bestReportCandidate(visibleCandidates)
+    return bestReportCandidate([...completionCandidates, ...visibleCandidates])
   }
 
   private async resolveReport(

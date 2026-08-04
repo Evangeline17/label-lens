@@ -1,7 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { readRecognitionImages } from '../multipart.js'
 import { AnalyzeRateLimiter } from '../rateLimit.js'
-import { RecognitionTaskManager } from '../services/recognitionTasks.js'
+import { InfiniSynapseError } from '../services/infinisynapse.js'
+import {
+  RecognitionRateLimitError,
+  RecognitionTaskManager,
+} from '../services/recognitionTasks.js'
 import { ValidationError } from '../validation.js'
 
 interface RecognizeApiOptions {
@@ -14,11 +18,17 @@ interface RecognizeApiOptions {
 const TASK_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-function json(response: ServerResponse, status: number, payload: unknown): void {
+function json(
+  response: ServerResponse,
+  status: number,
+  payload: unknown,
+  headers: Record<string, string> = {},
+): void {
   response.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
     'X-Content-Type-Options': 'nosniff',
+    ...headers,
   })
   response.end(JSON.stringify(payload))
 }
@@ -76,7 +86,7 @@ export function createRecognizeApi(options: RecognizeApiOptions = {}) {
       if (!lease) {
         json(response, 429, {
           error: '图片识别请求过于频繁，请先检查当前任务。',
-        })
+        }, { 'Retry-After': '5' })
         return
       }
       try {
@@ -85,9 +95,22 @@ export function createRecognizeApi(options: RecognizeApiOptions = {}) {
         json(response, 202, task)
       } catch (error) {
         lease.release()
-        json(response, error instanceof ValidationError ? 400 : 502, {
-          error: publicError(error),
-        })
+        if (error instanceof RecognitionRateLimitError) {
+          json(
+            response,
+            429,
+            {
+              error: publicError(error),
+              taskId: error.taskId,
+              connId: error.connId,
+            },
+            { 'Retry-After': error.retryAfter ?? '5' },
+          )
+        } else {
+          json(response, error instanceof ValidationError ? 400 : 502, {
+            error: publicError(error),
+          })
+        }
       }
       return
     }
@@ -101,7 +124,19 @@ export function createRecognizeApi(options: RecognizeApiOptions = {}) {
       try {
         json(response, 200, await manager.status(taskId))
       } catch (error) {
-        json(response, 502, { error: publicError(error) })
+        if (
+          error instanceof InfiniSynapseError &&
+          (error.httpStatus === 429 || error.code === 429)
+        ) {
+          json(
+            response,
+            429,
+            { error: publicError(error), taskId },
+            { 'Retry-After': error.retryAfter ?? '5' },
+          )
+        } else {
+          json(response, 502, { error: publicError(error) })
+        }
       }
       return
     }

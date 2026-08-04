@@ -16,6 +16,15 @@ const goals = new Set([
   'claims',
   'balance',
 ])
+const quickGoals = new Set([
+  'protein',
+  'calories',
+  'sugar',
+  'fat',
+  'sodium',
+  'value',
+  'overall',
+])
 const categories = new Set([
   '酸奶/乳制品',
   '面包/主食',
@@ -146,6 +155,24 @@ function readCount(value: unknown, path: string, issues: string[]): number {
     return 0
   }
   return value
+}
+
+function readStringArray(
+  value: unknown,
+  path: string,
+  issues: string[],
+  limit = 40,
+): string[] {
+  if (!Array.isArray(value)) {
+    if (value !== undefined) issues.push(`${path} 必须是数组`)
+    return []
+  }
+  if (value.length > limit) issues.push(`${path} 最多 ${limit} 项`)
+  return value
+    .slice(0, limit)
+    .map((item, index) =>
+      readString(item, `${path}[${index}]`, issues, { max: 300, required: true }),
+    )
 }
 
 function validateProduct(value: unknown, index: number, issues: string[]): AnalyzeProduct {
@@ -580,6 +607,79 @@ export function validateAnalyzeInput(value: unknown): AnalyzeInput {
       readString(item, `insufficient[${index}]`, issues, { max: 300, required: true }),
     )
 
+  const rawPreference =
+    value.rawPreference === undefined
+      ? typeof value.customRequirementText === 'string'
+        ? value.customRequirementText
+        : ''
+      : readString(value.rawPreference, 'rawPreference', issues, { max: 300 })
+  const quickGoalValue = value.quickGoal
+  const quickGoal =
+    quickGoalValue === null || quickGoalValue === undefined
+      ? null
+      : readString(quickGoalValue, 'quickGoal', issues, { max: 30 })
+  if (quickGoal !== null && !quickGoals.has(quickGoal)) {
+    issues.push('quickGoal 不是支持的快捷目标')
+  }
+  if (value.confirmedProducts !== undefined && !Array.isArray(value.confirmedProducts)) {
+    issues.push('confirmedProducts 必须是数组')
+  }
+  if (value.deterministicMetrics !== undefined && !Array.isArray(value.deterministicMetrics)) {
+    issues.push('deterministicMetrics 必须是数组')
+  }
+  const availableDimensions = readStringArray(
+    value.availableDimensions,
+    'availableDimensions',
+    issues,
+  )
+  const missingDimensions = readStringArray(
+    value.missingDimensions,
+    'missingDimensions',
+    issues,
+  )
+  const localRecord = isRecord(value.localComparison) ? value.localComparison : {}
+  if (value.localComparison !== undefined && !isRecord(value.localComparison)) {
+    issues.push('localComparison 必须是对象')
+  }
+  const localStatus =
+    value.localComparison === undefined
+      ? 'advanced'
+      : readString(localRecord.status, 'localComparison.status', issues, {
+          max: 20,
+          required: true,
+        })
+  if (!['full', 'partial', 'insufficient', 'advanced'].includes(localStatus)) {
+    issues.push('localComparison.status 不是支持的状态')
+  }
+  const localPreferredId =
+    localRecord.preferredId === null || localRecord.preferredId === undefined
+      ? null
+      : readString(localRecord.preferredId, 'localComparison.preferredId', issues, {
+          max: 100,
+        })
+  if (localPreferredId && !ids.includes(localPreferredId)) {
+    issues.push('localComparison.preferredId 必须属于本次 products')
+  }
+  const localComparison = {
+    status: localStatus as AnalyzeInput['localComparison']['status'],
+    preferredId: localPreferredId,
+    compared: readStringArray(localRecord.compared, 'localComparison.compared', issues),
+    summary:
+      value.localComparison === undefined
+        ? ''
+        : readString(localRecord.summary, 'localComparison.summary', issues, {
+            max: 1000,
+          }),
+  }
+  const safetyBoundary =
+    value.safetyBoundary === undefined
+      ? '不得提供医疗诊断、治疗方案或个性化医疗营养建议。'
+      : readString(value.safetyBoundary, 'safetyBoundary', issues, { max: 300 })
+  const requestFingerprint =
+    value.requestFingerprint === undefined
+      ? ''
+      : readString(value.requestFingerprint, 'requestFingerprint', issues, { max: 100 })
+
   const customRequirementText =
     value.customRequirementText === undefined
       ? ''
@@ -672,6 +772,15 @@ export function validateAnalyzeInput(value: unknown): AnalyzeInput {
 
   if (issues.length) throw new ValidationError([...new Set(issues)].slice(0, 20))
   return {
+    rawPreference,
+    quickGoal: quickGoal as AnalyzeInput['quickGoal'],
+    confirmedProducts: products,
+    deterministicMetrics: calculated,
+    availableDimensions,
+    missingDimensions,
+    localComparison,
+    safetyBoundary,
+    requestFingerprint,
     goal,
     budgets,
     products,

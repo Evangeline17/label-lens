@@ -3,7 +3,18 @@ import type {
   LabelImageUpload,
   LabelRecognitionTaskStatusResult,
 } from '../types.js'
-import { InfiniSynapseService } from './infinisynapse.js'
+import { InfiniSynapseError, InfiniSynapseService } from './infinisynapse.js'
+
+export class RecognitionRateLimitError extends Error {
+  constructor(
+    readonly taskId: string,
+    readonly connId: string,
+    readonly retryAfter?: string,
+  ) {
+    super('图片识别服务请求过于频繁，请先检查当前任务。')
+    this.name = 'RecognitionRateLimitError'
+  }
+}
 
 interface RecognitionTaskManagerOptions {
   getApiKey?: () => string | undefined
@@ -62,13 +73,24 @@ export class RecognitionTaskManager {
       ...this.serviceOptions,
     })
     let progress = '正在准备标签图片'
-    const submission = await service.submitLabelRecognition(files, {
-      taskId,
-      connId,
-      onProgress: (message) => {
-        progress = message
-      },
-    })
+    let submission: { taskId: string; connId: string }
+    try {
+      submission = await service.submitLabelRecognition(files, {
+        taskId,
+        connId,
+        onProgress: (message) => {
+          progress = message
+        },
+      })
+    } catch (error) {
+      if (
+        error instanceof InfiniSynapseError &&
+        (error.httpStatus === 429 || error.code === 429)
+      ) {
+        throw new RecognitionRateLimitError(taskId, connId, error.retryAfter)
+      }
+      throw error
+    }
     const record: InternalRecognitionRecord = {
       taskId: submission.taskId,
       connId: submission.connId,
@@ -127,6 +149,7 @@ export class RecognitionTaskManager {
     return {
       status: record.status,
       taskId: record.taskId,
+      connId: record.connId,
       createdAt: record.createdAt,
       progress: record.progress,
       result: record.result,

@@ -5,11 +5,13 @@ import {
   applyRecognitionDraft,
   abandonLabelRecognition,
   canConfirmRecognition,
+  getLabelRecognitionStatus,
   markRecognitionImagesChanged,
   mergeRecognitionStatus,
   recognitionActionLabel,
   recognitionResultToDraft,
   startLabelRecognition,
+  RecognitionHttpError,
 } from './labelRecognition'
 
 afterEach(() => {
@@ -160,6 +162,40 @@ describe('label recognition confirmation', () => {
     expect(output.taskId).toBe('6f645da0-63b5-487e-9cc8-745b1d608001')
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(fetchMock.mock.calls[0][0]).toBe('/api/ocr/label')
+  })
+
+  it('exposes Retry-After and existing task identifiers on HTTP 429', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: '请求过于频繁',
+            taskId: '6f645da0-63b5-487e-9cc8-745b1d608001',
+            connId: '7f645da0-63b5-487e-9cc8-745b1d608002',
+          }),
+          {
+            status: 429,
+            headers: {
+              'Content-Type': 'application/json',
+              'Retry-After': '11',
+            },
+          },
+        ),
+      ),
+    )
+
+    const error = await getLabelRecognitionStatus(
+      '6f645da0-63b5-487e-9cc8-745b1d608001',
+    ).catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(RecognitionHttpError)
+    expect(error).toMatchObject({
+      status: 429,
+      retryAfterMs: 11_000,
+      taskId: '6f645da0-63b5-487e-9cc8-745b1d608001',
+      connId: '7f645da0-63b5-487e-9cc8-745b1d608002',
+    })
   })
 
   it('abandons only the local recognition state', () => {

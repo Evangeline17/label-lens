@@ -8,8 +8,25 @@ import type {
   Product,
   RankingGroup,
 } from '../types'
+import type { QuickGoal, ProgressiveResultStatus } from './quickComparison'
+
+export interface AiLocalComparison {
+  status: ProgressiveResultStatus | 'advanced'
+  preferredId: string | null
+  compared: string[]
+  summary: string
+}
 
 export interface AiAnalyzePayload {
+  rawPreference: string
+  quickGoal: QuickGoal | null
+  confirmedProducts: Array<Omit<Product, 'ingredientPhoto' | 'nutritionPhoto'>>
+  deterministicMetrics: CalculatedProduct[]
+  availableDimensions: string[]
+  missingDimensions: string[]
+  localComparison: AiLocalComparison
+  safetyBoundary: string
+  requestFingerprint: string
   goal: ComparisonGoal
   budgets: Budgets
   products: Array<Omit<Product, 'ingredientPhoto' | 'nutritionPhoto'>>
@@ -29,6 +46,7 @@ export interface AiAnalysisResult {
   report: string
   normalized?: boolean
   normalizationWarnings?: string[]
+  reportMode?: 'structured' | 'partial' | 'raw'
 }
 
 export type AiTaskStatus =
@@ -50,6 +68,18 @@ export interface AiTaskStatusResult {
   localWaitEnded?: boolean
   normalized?: boolean
   normalizationWarnings?: string[]
+  reportMode?: 'structured' | 'partial' | 'raw'
+}
+
+export function aiAnalysisRequestKey(payload: AiAnalyzePayload): string {
+  const { requestFingerprint: _requestFingerprint, ...fingerprintInput } = payload
+  const serialized = JSON.stringify(fingerprintInput)
+  let hash = 0x811c9dc5
+  for (let index = 0; index < serialized.length; index += 1) {
+    hash ^= serialized.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return `v1-${(hash >>> 0).toString(16)}`
 }
 
 interface PayloadParts {
@@ -65,6 +95,10 @@ interface PayloadParts {
   customRequirementRules: CustomRequirementRule[]
   customRequirementEvaluation: CustomRequirementEvaluation
   unresolvedPreferences: string[]
+  quickGoal?: QuickGoal | null
+  availableDimensions?: string[]
+  missingDimensions?: string[]
+  localComparison?: AiLocalComparison
 }
 
 function productWithoutPhotos(
@@ -91,10 +125,26 @@ function productWithoutPhotos(
 }
 
 export function buildAiAnalyzePayload(parts: PayloadParts): AiAnalyzePayload {
-  return {
+  const confirmedProducts = parts.products.map(productWithoutPhotos)
+  const base = {
+    rawPreference: parts.customRequirementText,
+    quickGoal: parts.quickGoal ?? null,
+    confirmedProducts,
+    deterministicMetrics: parts.calculated,
+    availableDimensions: parts.availableDimensions ?? [],
+    missingDimensions: parts.missingDimensions ?? parts.insufficient,
+    localComparison: parts.localComparison ?? {
+      status: 'advanced' as const,
+      preferredId: parts.preferred?.id ?? null,
+      compared: [],
+      summary: parts.preferred
+        ? `${parts.preferred.name}更符合当前确定性目标。`
+        : '本地确定性比较未形成唯一首选。',
+    },
+    safetyBoundary: '不得提供医疗诊断、治疗方案或个性化医疗营养建议。',
     goal: parts.goal,
     budgets: { ...parts.budgets },
-    products: parts.products.map(productWithoutPhotos),
+    products: confirmedProducts,
     calculated: parts.calculated,
     rankings: parts.rankings,
     claimChecks: parts.claimChecks,
@@ -107,6 +157,8 @@ export function buildAiAnalyzePayload(parts: PayloadParts): AiAnalyzePayload {
     customRequirementEvaluation: parts.customRequirementEvaluation,
     unresolvedPreferences: parts.unresolvedPreferences,
   }
+  const payload = { ...base, requestFingerprint: '' }
+  return { ...payload, requestFingerprint: aiAnalysisRequestKey(payload) }
 }
 
 function browserClientId(): string {
@@ -162,17 +214,42 @@ export async function startAiAnalysis(
   payload: AiAnalyzePayload,
   signal?: AbortSignal,
 ): Promise<AiTaskStatusResult> {
-  const response = await fetch('/api/analyze', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-label-lens-client-id': browserClientId(),
-    },
-    body: JSON.stringify(payload),
-    signal,
-  })
-  return parseTaskResponse(response)
+  const requestKey = aiAnalysisRequestKey(payload)
+  if (activeAnalysisStart) {
+    if (activeAnalysisStart.requestKey === requestKey) {
+      return activeAnalysisStart.promise
+    }
+    try {
+      await activeAnalysisStart.promise
+    } catch {
+      // A different request may start after the previous creation attempt settles.
+    }
+    return startAiAnalysis(payload, signal)
+  }
+  const promise = (async () => {
+    const response = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-label-lens-client-id': browserClientId(),
+      },
+      body: JSON.stringify(payload),
+      signal,
+    })
+    return parseTaskResponse(response)
+  })()
+  activeAnalysisStart = { requestKey, promise }
+  try {
+    return await promise
+  } finally {
+    if (activeAnalysisStart?.promise === promise) activeAnalysisStart = null
+  }
 }
+
+let activeAnalysisStart: {
+  requestKey: string
+  promise: Promise<AiTaskStatusResult>
+} | null = null
 
 export async function getAiAnalysisStatus(
   taskId: string,

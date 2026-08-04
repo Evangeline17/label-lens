@@ -4,6 +4,7 @@ import { validAnalyzeInput } from '../validation.test'
 import {
   agentMessageText,
   isCompletionMessage,
+  parseFlexibleReport,
   ReportFormatError,
   REQUIRED_REPORT_HEADINGS,
   validateAndNormalizeReport,
@@ -137,5 +138,80 @@ compact payload: {"goal":"proteinDensity","products":[],"rankings":[]}`
     expect(result.report).not.toContain('远超')
     expect(result.normalized).toBe(true)
     expect(result.normalizationWarnings).toContain('已中和夸张措辞')
+  })
+})
+
+describe('parseFlexibleReport', () => {
+  const structured = {
+    intentSummary: '希望在现有标签信息中做综合选择。',
+    interpretedRequirements: [
+      {
+        originalText: '想健康一点',
+        type: 'soft',
+        evaluable: false,
+        explanation: '按综合差异解释现有标签。',
+      },
+    ],
+    recommendation: {
+      type: 'tradeoff',
+      productId: null,
+      summary: '两款各有取舍。',
+    },
+    evidence: [
+      {
+        dimension: 'protein',
+        statement: 'A的蛋白质标签值更高。',
+        source: 'deterministicMetrics',
+      },
+    ],
+    limitations: ['价格未录入，因此不比较性价比。'],
+    userFacingAnalysis: '本次只比较包装标签中已经确认的信息。',
+  }
+
+  it('parses a standard JSON report', () => {
+    const result = parseFlexibleReport(structured)
+
+    expect(result?.reportMode).toBe('structured')
+    expect(result?.report).toContain('两款各有取舍')
+    expect(result?.report).toContain('A的蛋白质标签值更高')
+  })
+
+  it('parses JSON inside a Markdown code block', () => {
+    const result = parseFlexibleReport(`说明文字\n\`\`\`json\n${JSON.stringify(structured)}\n\`\`\``)
+
+    expect(result?.reportMode).toBe('structured')
+    expect(result?.report).toContain('本次只比较包装标签')
+  })
+
+  it('parses a JSON string nested in completion_result', () => {
+    const result = parseFlexibleReport({
+      completion_result: JSON.stringify(structured),
+    })
+
+    expect(result?.reportMode).toBe('structured')
+    expect(result?.report).toContain('希望在现有标签信息中做综合选择')
+  })
+
+  it('accepts partial structured output when non-core fields are missing', () => {
+    const result = parseFlexibleReport({
+      recommendation: { summary: '现有信息下A更匹配。' },
+    })
+
+    expect(result?.reportMode).toBe('partial')
+    expect(result?.report).toContain('现有信息下A更匹配')
+  })
+
+  it('falls back to safe raw analysis text when JSON cannot be parsed', () => {
+    const result = parseFlexibleReport(
+      '综合现有包装标签，A的蛋白质标签值更高；价格缺失，所以本次不比较性价比。',
+    )
+
+    expect(result?.reportMode).toBe('raw')
+    expect(result?.report).toContain('价格缺失')
+  })
+
+  it('returns null only when no usable text exists', () => {
+    expect(parseFlexibleReport({ completion_result: '' })).toBeNull()
+    expect(parseFlexibleReport('任务已完成')).toBeNull()
   })
 })

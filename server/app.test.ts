@@ -8,6 +8,8 @@ import { validAnalyzeInput } from './validation.test'
 
 const cleanupDirectories: string[] = []
 const cleanupServers: Server[] = []
+const TASK_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 afterEach(async () => {
   vi.unstubAllEnvs()
@@ -242,5 +244,64 @@ describe('production app handler', () => {
     expect(response.status).toBe(502)
     expect(body.error).toBe('recognition submission rejected')
     expect(body).not.toHaveProperty('taskId')
+  })
+
+  it('returns recoverable identifiers and Retry-After when recognition newTask is rate limited', async () => {
+    const fetchImpl = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/api/tools/taskUpload/')) {
+        return new Response(
+          JSON.stringify({
+            code: 200,
+            data: {
+              name: 'ingredients-label.jpg',
+              size: 4,
+              logicalPath: 'label_inputs/ingredients-label.jpg',
+              assetId: 'asset-a',
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      if (url.includes('/api/ai/events')) {
+        return new Response(new ReadableStream<Uint8Array>({}), {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        })
+      }
+      const body =
+        typeof init?.body === 'string'
+          ? (JSON.parse(init.body) as Record<string, unknown>)
+          : {}
+      if (url.endsWith('/api/ai/message') && body.type === 'newTask') {
+        return new Response(JSON.stringify({ message: 'rate limited' }), {
+          status: 429,
+          headers: { 'Content-Type': 'application/json', 'Retry-After': '13' },
+        })
+      }
+      throw new Error(`unexpected request ${url}`)
+    }
+    const baseUrl = await listen(
+      await fixtureDist(),
+      () => 'test-key',
+      fetchImpl as typeof fetch,
+    )
+    const form = new FormData()
+    form.append(
+      'ingredientImage',
+      new Blob([new Uint8Array([0xff, 0xd8, 0xff, 1])], { type: 'image/jpeg' }),
+      'ingredients-label.jpg',
+    )
+
+    const response = await fetch(`${baseUrl}/api/ocr/label`, {
+      method: 'POST',
+      body: form,
+    })
+    const body = (await response.json()) as Record<string, unknown>
+
+    expect(response.status).toBe(429)
+    expect(response.headers.get('Retry-After')).toBe('13')
+    expect(body.taskId).toMatch(TASK_ID_PATTERN)
+    expect(body.connId).toMatch(TASK_ID_PATTERN)
   })
 })

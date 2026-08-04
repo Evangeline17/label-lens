@@ -6,6 +6,8 @@ export function buildProductComparisonPrompt(input: CompactAnalyzePayload): stri
 这是一个只解释既有结构化标签数据的任务。不要联网搜索，不要使用浏览器，不要请求或读取图片、文件、数据库、RAG 或外部资料。不要重新计算、改写、修正或补全客户端已经给出的确定性指标、排名与宣传语核对结果。
 
 用户本次主目标：${input.goal.label}
+用户原始要求（必须原样理解，不得改写后再判断）：${input.rawPreference || '未填写'}
+用户快捷目标：${input.quickGoal || '未选择'}
 
 必须遵守：
 1. 只根据下方 JSON 数据解释，不得发明包装信息或补全空值。
@@ -27,23 +29,45 @@ export function buildProductComparisonPrompt(input: CompactAnalyzePayload): stri
 17. 用户按严格热量预算比较时，必须引用 products.currentBudgets 中客户端已经给出的可食用克数（或 mL）和包装比例；不得用“整包也可以”等表述替代严格预算结果。
 18. customRequirements 中的 constraints、matches 和 productSummaries 是本地确定性规则的结果，不得重新计算、改写满足状态或把 unresolvedPreferences 强行转换成数字约束。
 19. 若用户的多项自定义要求彼此冲突，或没有商品满足全部要求，应明确解释主要取舍，不得强行宣布某款完全符合。
-20. “适合减肥”“更健康”“不长胖”、口感、饱腹感和长期健康效果等模糊偏好，只能说明标签无法确认，不得转换为疾病、医学或营养治疗结论。
-21. 自定义要求缺少标签依据时必须沿用“无法判断”，不得自行补全口感、糖含量、来源贡献或其他未提供信息。
+20. “想健康一点”“吃得好一点”“更有营养”“整体看看”等模糊但非医疗偏好，不得转换成低热量、高蛋白等单一目标；当客户端目标为综合模式时，应积极解释现有标签数据的主要差异，不得把模糊偏好描述成分析失败。
+21. 感冒、胃不舒服、血糖高、正在吃药等身体或医疗状态不得作为推荐依据，不得生成诊断、治疗或个性化医疗营养建议；但仍应继续完成普通食品标签比较。自定义要求缺少标签依据时不得自行补全口感、糖含量、来源贡献或其他未提供信息。
 22. 配料关注词必须原样引用。例如客户端只检查“白砂糖”时，只能写“录入文字中未出现白砂糖”；不得扩大成“无蔗糖类原料”“不含添加糖”或“无糖”。
 23. 避免“远超”“远低”“远未达到”“断层领先”“碾压”等夸张措辞；有客户端提供的差额时优先客观陈述差额。
 24. 不得写“所有维度最后”“所有指标均排末位”等概括，除非 compact payload 中每个相关排名都支持该结论。
 25. 必须区分整包热量与蛋白质密度：包装总热量较高不等于蛋白质效率较低，不得把前者解释成获得蛋白质优势所需的热量代价。
+26. rawPreference 是一级输入。即使它无法转换为固定标签，也必须结合 availableDimensions、missingDimensions 和 localComparison 解释现有标签数据的取舍，不得要求用户重新选择快捷标签。
+27. rawPreference 中存在明确且较新的可计算要求时，该要求优先于 quickGoal；若二者冲突，必须在 intentSummary 或 limitations 中明确指出冲突及采用的处理方式，不得忽略任意一项。
+28. 身体状态可以保留为 context，但不得作为推荐依据；应自然说明“你提到的身体状况不会作为医疗推荐依据，本次只比较包装标签信息。”
+29. confirmedProducts 和 deterministicMetrics 是已经确认的事实；availableDimensions 是允许比较的范围，missingDimensions 只能作为限制说明。不得补全任何缺失数值。
 
-严格使用以下 Markdown 结构：
-# 本次结论
-## 为什么更匹配
-## 各款商品的主要取舍
-## 不同目标下排名为什么变化
-## 包装宣传提醒
-## 数据不足与无法判断
-## 最终购买建议
+优先直接输出一个 JSON 对象，不要包裹额外说明。结构如下；非核心数组没有内容时使用空数组：
+{
+  "intentSummary": "对用户需求的简短理解",
+  "interpretedRequirements": [
+    {
+      "originalText": "用户原始要求",
+      "type": "hard | soft | context | unsupported",
+      "evaluable": true,
+      "explanation": "如何处理"
+    }
+  ],
+  "recommendation": {
+    "type": "winner | tradeoff | insufficient",
+    "productId": "商品ID或null",
+    "summary": "最终结论"
+  },
+  "evidence": [
+    {
+      "dimension": "protein",
+      "statement": "只引用客户端已提供的事实",
+      "source": "deterministicMetrics"
+    }
+  ],
+  "limitations": ["缺失字段造成的具体限制"],
+  "userFacingAnalysis": "面向用户的完整自然语言分析"
+}
 
-“最终购买建议”应围绕用户这一次的目标和预算给出有条件的选择建议，不得把单次比较扩展成长期饮食或医疗建议。
+recommendation.summary、userFacingAnalysis 至少提供一项。“最终购买建议”应围绕用户这一次的目标和预算给出有条件的选择建议，不得把单次比较扩展成长期饮食或医疗建议。
 
 以下是唯一允许使用的数据：
 \`\`\`json

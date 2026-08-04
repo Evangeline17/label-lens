@@ -105,7 +105,28 @@ export function buildCompactAnalyzePayload(input: AnalyzeInput): {
 } {
   const idToIndex = new Map(input.products.map((product, index) => [product.id, index]))
   const preferredIndex = input.preferred ? idToIndex.get(input.preferred.id) : undefined
+  const confirmedProducts = input.products.map((_, index) =>
+    compactProduct(input, index, input.calculated[index]),
+  )
   const payload: CompactAnalyzePayload = {
+    rawPreference: input.rawPreference,
+    quickGoal: input.quickGoal,
+    confirmedProducts,
+    deterministicMetrics: confirmedProducts.map((product) =>
+      compactObject({
+        product: product.product,
+        name: product.name,
+        per100: product.per100,
+        perPackage: product.perPackage,
+        efficiency: product.efficiency,
+        currentBudgets: product.currentBudgets,
+      }),
+    ),
+    availableDimensions: input.availableDimensions,
+    missingDimensions: input.missingDimensions,
+    localComparison: input.localComparison,
+    safetyBoundary: input.safetyBoundary,
+    requestFingerprint: input.requestFingerprint,
     goal: compactObject({
       key: input.goal,
       label: goalLabels[input.goal],
@@ -119,9 +140,7 @@ export function buildCompactAnalyzePayload(input: AnalyzeInput): {
       proteinG: numericString(input.budgets.protein, 1),
       priceCny: numericString(input.budgets.price, 2),
     }),
-    products: input.products.map((_, index) =>
-      compactProduct(input, index, input.calculated[index]),
-    ),
+    products: confirmedProducts,
     rankings: input.rankings.map((ranking) => ({
       label: ranking.label,
       order: [...ranking.items]

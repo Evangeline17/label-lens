@@ -125,7 +125,7 @@ export function CustomRequirementsEditor({
         <div className="mt-5 rounded-2xl border border-dashed border-orange/30 bg-white p-4">
           <h3 className="text-sm font-black">需要 AI 解释的偏好</h3>
           <p className="mt-1 text-xs leading-5 text-stone-500">
-            这些文字没有被转换为确定性指标；生成 AI 建议时只会作为偏好解释。
+            这项偏好暂时无法直接转换为确定的比较指标。身体状态不会被解释为医疗或营养结论，请从明确目标中另行选择。
           </p>
           <ul className="mt-3 space-y-2">
             {unresolvedPreferences.map((preference) => (

@@ -6,10 +6,12 @@ import type {
   CustomRequirementEvaluation,
   CustomRequirementRule,
   LabelRecognitionSession,
+  LabelRecognitionQueueSnapshot,
   Product,
   RankingGroup,
 } from '../types'
 import type { AiTaskStatus } from './aiAnalysis'
+import type { QuickGoal } from './quickComparison'
 
 export const LABEL_LENS_SESSION_KEY = 'label-lens-session-v1'
 const LEGACY_AI_TASK_KEY = 'label-lens-active-ai-task'
@@ -21,7 +23,16 @@ export interface SessionStorageLike {
 }
 
 export interface StoredAppSession {
-  flow?: 'home' | 'quick-capture' | 'quick-results' | 'advanced'
+  flow?:
+    | 'home'
+    | 'quick-capture'
+    | 'quick-results'
+    | 'quick-upload'
+    | 'quick-review'
+    | 'quick-result'
+    | 'quick-analysis'
+    | 'advanced'
+  quickGoal?: QuickGoal | null
   step: number
   goal: ComparisonGoal
   budgets: Budgets
@@ -36,10 +47,12 @@ export interface StoredAppSession {
   claimChecks: ClaimCheckResult[]
   preferred: { id: string; name: string } | null
   recognitionSessions?: Record<string, LabelRecognitionSession>
+  recognitionQueue?: LabelRecognitionQueueSnapshot
 }
 
 export interface StoredAiSession {
   status: AiTaskStatus | 'idle' | 'starting'
+  requestKey?: string
   taskId?: string
   createdAt?: string
   progress?: string
@@ -48,6 +61,7 @@ export interface StoredAiSession {
   localWaitEnded?: boolean
   normalized?: boolean
   normalizationWarnings?: string[]
+  reportMode?: 'structured' | 'partial' | 'raw'
 }
 
 export interface LabelLensSession {
@@ -96,11 +110,17 @@ function safeSession(
   if (candidate.version !== 1) return null
   const session = candidate as LabelLensSession
   if (session.app?.recognitionSessions) {
+    const queuedProductIds = new Set([
+      ...(session.app.recognitionQueue?.current
+        ? [session.app.recognitionQueue.current.productId]
+        : []),
+      ...(session.app.recognitionQueue?.pendingProductIds ?? []),
+    ])
     session.app.recognitionSessions = Object.fromEntries(
       Object.entries(session.app.recognitionSessions).map(([productId, recognition]) => [
         productId,
         restoreRecognitionState
-          ? restoreRecognitionSession(recognition)
+          ? restoreRecognitionSession(recognition, queuedProductIds.has(productId))
           : recognitionSessionForStorage(recognition),
       ]),
     )
@@ -113,6 +133,7 @@ function recognitionSessionForStorage(
 ): LabelRecognitionSession {
   const allowedStatuses: LabelRecognitionSession['status'][] = [
     'idle',
+    'queued',
     'starting',
     'processing',
     'completed',
@@ -120,26 +141,30 @@ function recognitionSessionForStorage(
     'not_found',
     'unknown',
   ]
-  return {
+  const stored: LabelRecognitionSession = {
     status: allowedStatuses.includes(session.status) ? session.status : 'idle',
     stale: Boolean(session.stale),
     taskId: session.taskId,
+    connId: session.connId,
     result: session.result ? { ...session.result } : undefined,
   }
+  return stored
 }
 
 function restoreRecognitionSession(
   session: LabelRecognitionSession,
+  isQueued: boolean,
 ): LabelRecognitionSession {
   const stored = recognitionSessionForStorage(session)
   const hasStoredRecognition = Boolean(
     stored.taskId || stored.result || stored.stale || stored.status !== 'idle',
   )
   if (!hasStoredRecognition) return { status: 'idle', stale: false }
+  if (isQueued) return stored
   return {
     ...stored,
     status:
-      stored.status === 'starting' || stored.status === 'processing'
+      ['queued', 'starting', 'processing'].includes(stored.status)
         ? 'idle'
         : stored.status,
     stale: true,
@@ -223,6 +248,14 @@ export function saveAppSession(
               recognitionSessionForStorage(session),
             ]),
           ),
+          recognitionQueue: app.recognitionQueue
+            ? {
+                current: app.recognitionQueue.current
+                  ? { ...app.recognitionQueue.current }
+                  : undefined,
+                pendingProductIds: [...app.recognitionQueue.pendingProductIds],
+              }
+            : undefined,
         },
       },
       storage,
